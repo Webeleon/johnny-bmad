@@ -8,8 +8,13 @@ export function setVerbose(verbose: boolean): void {
   verboseMode = verbose;
 }
 
+export function isVerbose(): boolean {
+  return verboseMode;
+}
+
 export function log(level: LogLevel, message: string, ...args: unknown[]): void {
-  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const now = new Date().toISOString();
+  const timestamp = now.split('T')[0] + ' ' + now.split('T')[1].split('.')[0];
   const elapsed = getSessionElapsed();
   const prefix = chalk.gray(`[${timestamp}]`);
   const suffix = chalk.gray(`(${elapsed})`);
@@ -109,4 +114,42 @@ export function infoWithTiming(message: string, agentDurationMs?: number): void 
  */
 export function successWithTiming(message: string, agentDurationMs?: number): void {
   logWithTiming('success', message, agentDurationMs);
+}
+
+// Agent role colors
+const AGENT_COLORS: Record<string, (text: string) => string> = {
+  'SM': chalk.cyan,
+  'Story Creator': chalk.magenta,
+  'Dev': chalk.blue,
+  'Review': chalk.yellow,
+};
+
+/**
+ * Log agent lifecycle events (start, complete, fail) in verbose mode.
+ */
+export function agentLifecycle(
+  agentRole: string,
+  event: 'start' | 'complete' | 'fail',
+  details?: { durationMs?: number; exitCode?: number }
+): void {
+  if (!verboseMode) return;
+
+  const color = AGENT_COLORS[agentRole] || chalk.white;
+  const roleTag = color(`[${agentRole}]`);
+
+  switch (event) {
+    case 'start':
+      log('debug', `${roleTag} Starting agent...`);
+      break;
+    case 'complete': {
+      const duration = details?.durationMs
+        ? ` (${formatDuration(details.durationMs)})`
+        : '';
+      log('debug', `${roleTag} Completed${duration}`);
+      break;
+    }
+    case 'fail':
+      log('debug', `${roleTag} Failed with exit code ${details?.exitCode || 'unknown'}`);
+      break;
+  }
 }

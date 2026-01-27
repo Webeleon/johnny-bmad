@@ -10,7 +10,8 @@ export async function runSmAgent(cwd: string): Promise<void> {
     model: 'opus',
     prompt: getSmAgentPrompt(),
     cwd,
-    allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']
+    allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+    agentRole: 'SM'
   });
 
   infoWithTiming('SM agent completed', durationMs);

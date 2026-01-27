@@ -14,7 +14,8 @@ export async function runDevAgent(
     model: 'sonnet',
     prompt: getDevStoryPrompt(storyId, storyFilePath),
     cwd,
-    allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']
+    allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+    agentRole: 'Dev'
   });
 
   infoWithTiming('Dev agent completed', durationMs);

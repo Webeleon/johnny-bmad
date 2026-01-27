@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import type { ClaudeOptions, ClaudeResult } from '../types.js';
-import { debug } from '../utils/logger.js';
+import { debug, isVerbose, agentLifecycle } from '../utils/logger.js';
+import { createLabeledStream } from '../utils/stream-wrapper.js';
 
 export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
@@ -19,16 +20,34 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
     debug(`Prompt length: ${opts.prompt.length} chars`);
     debug(`Working directory: ${opts.cwd}`);
 
+    // Log agent start
+    if (opts.agentRole) {
+      agentLifecycle(opts.agentRole, 'start');
+    }
+
+    // Determine stdio configuration based on verbose mode and agent role
+    const stdio = (isVerbose() && opts.agentRole)
+      ? ['inherit' as const, createLabeledStream(opts.agentRole, 'stdout', process.stdout), createLabeledStream(opts.agentRole, 'stderr', process.stderr)]
+      : 'inherit';
+
     const proc = spawn('claude', args, {
       cwd: opts.cwd,
-      stdio: 'inherit'
+      stdio
     });
 
     proc.on('close', (code) => {
       const durationMs = Date.now() - startTime;
       if (code !== 0) {
+        // Log failure
+        if (opts.agentRole) {
+          agentLifecycle(opts.agentRole, 'fail', { exitCode: code || undefined, durationMs });
+        }
         reject(new Error(`Claude exited with code ${code}`));
       } else {
+        // Log successful completion
+        if (opts.agentRole) {
+          agentLifecycle(opts.agentRole, 'complete', { durationMs });
+        }
         resolve({ durationMs });
       }
     });

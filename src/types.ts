@@ -84,6 +84,7 @@ export interface ClaudeOptions {
   prompt: string;
   cwd: string;
   allowedTools?: string[];
+  agentRole?: string;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'success';

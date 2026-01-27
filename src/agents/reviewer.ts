@@ -2,8 +2,10 @@ import { spawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parse as parseYaml } from 'yaml';
+import chalk from 'chalk';
 import { getReviewStoryPrompt } from '../claude/prompts.js';
-import { info, subHeader, debug, infoWithTiming } from '../utils/logger.js';
+import { info, subHeader, debug, infoWithTiming, isVerbose, agentLifecycle } from '../utils/logger.js';
+import { createLabeledStream } from '../utils/stream-wrapper.js';
 
 export interface ReviewResult {
   passed: boolean;
@@ -22,14 +24,22 @@ export function runReviewAgent(
     subHeader(`Review Agent: ${storyId}`);
     info('Reviewing implementation...');
 
+    // Log agent start
+    agentLifecycle('Review', 'start');
+
     const prompt = getReviewStoryPrompt(storyId, storyFilePath);
+
+    // Determine stderr stream based on verbose mode
+    const stderrStream = isVerbose()
+      ? createLabeledStream('Review', 'stderr', process.stderr)
+      : 'inherit';
 
     const proc = spawn(
       'claude',
       ['--model', 'opus', '-p', prompt, '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep'],
       {
         cwd,
-        stdio: ['inherit', 'pipe', 'inherit']
+        stdio: ['inherit', 'pipe', stderrStream]
       }
     );
 
@@ -37,13 +47,30 @@ export function runReviewAgent(
 
     proc.stdout.on('data', (data: Buffer) => {
       chunks.push(data);
-      process.stdout.write(data);
+
+      // In verbose mode, prefix stdout lines
+      if (isVerbose()) {
+        const chunk = data.toString();
+        const lines = chunk.split('\n');
+        const color = chalk.yellow; // Review agent color
+        for (const line of lines.slice(0, -1)) { // Skip last empty line
+          process.stdout.write(color('[Review] ') + line + '\n');
+        }
+        // Handle incomplete last line
+        if (lines[lines.length - 1]) {
+          process.stdout.write(color('[Review] ') + lines[lines.length - 1]);
+        }
+      } else {
+        process.stdout.write(data);
+      }
     });
 
     proc.on('close', (code) => {
       const durationMs = Date.now() - startTime;
 
       if (code !== 0) {
+        // Log failure
+        agentLifecycle('Review', 'fail', { exitCode: code || undefined, durationMs });
         reject(new Error(`Review agent exited with code ${code}`));
         return;
       }
@@ -59,6 +86,9 @@ export function runReviewAgent(
         const storyStatus = status?.development_status?.[storyId];
         const passed = storyStatus === 'done';
 
+        // Log completion
+        agentLifecycle('Review', 'complete', { durationMs });
+
         if (passed) {
           infoWithTiming('Review PASSED - story marked done in sprint-status.yaml', durationMs);
           resolve({ passed: true, output, durationMs });
@@ -70,6 +100,10 @@ export function runReviewAgent(
         // Fall back to stdout detection if yaml read fails
         debug(`Failed to read sprint-status.yaml: ${err}`);
         const passed = output.includes('REVIEW_PASSED');
+
+        // Log completion
+        agentLifecycle('Review', 'complete', { durationMs });
+
         if (passed) {
           infoWithTiming('Review PASSED (detected from output)', durationMs);
           resolve({ passed: true, output, durationMs });

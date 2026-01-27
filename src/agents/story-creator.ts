@@ -15,7 +15,8 @@ export async function runStoryCreator(
     model: 'opus',
     prompt: getCreateStoryPrompt(story.id, story.title, epicId),
     cwd,
-    allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep']
+    allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
+    agentRole: 'Story Creator'
   });
 
   infoWithTiming('Story creation completed', durationMs);
