@@ -2,6 +2,7 @@ export interface CliArgs {
   resume: boolean;
   help: boolean;
   verbose: boolean;
+  maxIterations?: number;
 }
 
 export interface BmadConfig {

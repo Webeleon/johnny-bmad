@@ -12,10 +12,10 @@ import { commitStoryChanges, isGitRepo } from './git/commit.js';
 import { info, error, success, warn, header, step, setVerbose, successWithTiming } from './utils/logger.js';
 import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
 
-const MAX_DEV_REVIEW_ITERATIONS = 10;
 
 export async function runOrchestrator(args: CliArgs): Promise<void> {
   const cwd = process.cwd();
+  const maxIterations = args.maxIterations ?? 10;
 
   // Start session timer
   startSessionTimer();
@@ -192,12 +192,12 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     let storyComplete = false;
     let iteration = 0;
 
-    while (!storyComplete && iteration < MAX_DEV_REVIEW_ITERATIONS) {
+    while (!storyComplete && iteration < maxIterations) {
       iteration++;
       state!.devReviewIteration = iteration;
       await saveState(cwd, state!);
 
-      info(`Dev-Review iteration ${iteration}/${MAX_DEV_REVIEW_ITERATIONS}`);
+      info(`Dev-Review iteration ${iteration}/${maxIterations}`);
 
       // Run Dev Agent
       await runDevAgent(cwd, story.id, story.filePath);
@@ -215,7 +215,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     // Handle max iterations exceeded
     if (!storyComplete) {
-      const action = await handleMaxIterations(story.id, MAX_DEV_REVIEW_ITERATIONS);
+      const action = await handleMaxIterations(story.id, maxIterations);
 
       switch (action) {
         case 'continue':
@@ -224,6 +224,14 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
           await saveState(cwd, state!);
           i--; // Retry this story
           continue;
+
+        case 'complete':
+          // Run final dev pass to address last review feedback
+          info('Running final dev pass before marking complete...');
+          await runDevAgent(cwd, story.id, story.filePath);
+          successWithTiming(`Marking story ${story.id} as complete (user override)`);
+          storyComplete = true;
+          break;
 
         case 'skip':
           warn(`Skipping story ${story.id} (marked as blocked)`);

@@ -34,7 +34,7 @@ export async function confirmResume(storyId: string, storyIndex: number): Promis
   return resume;
 }
 
-export type MaxIterationsAction = 'continue' | 'skip' | 'abort';
+export type MaxIterationsAction = 'continue' | 'complete' | 'skip' | 'abort';
 
 export async function handleMaxIterations(
   storyId: string,
@@ -47,6 +47,7 @@ export async function handleMaxIterations(
       message: `Story ${storyId} has gone through ${iterations} dev-review cycles without completion. What would you like to do?`,
       choices: [
         { name: 'Continue (reset iteration counter)', value: 'continue' },
+        { name: 'Mark as complete (run final dev pass, then commit)', value: 'complete' },
         { name: 'Skip story (mark as blocked)', value: 'skip' },
         { name: 'Abort (exit script)', value: 'abort' }
       ]

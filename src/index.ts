@@ -9,7 +9,8 @@ function parseArgs(argv: string[]): CliArgs {
     verbose: false
   };
 
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
     switch (arg) {
       case '--resume':
       case '-r':
@@ -23,6 +24,18 @@ function parseArgs(argv: string[]): CliArgs {
       case '-v':
         args.verbose = true;
         break;
+      case '--max-iterations':
+      case '-m': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          const value = parseInt(nextArg, 10);
+          if (!isNaN(value) && value > 0) {
+            args.maxIterations = value;
+            i++; // Skip the value argument
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -36,9 +49,10 @@ johnny-bmad - BMAD Implementation Phase Automation
 Usage: npx johnny-bmad [options]
 
 Options:
-  --resume, -r    Auto-resume from saved state without prompting
-  --verbose, -v   Enable verbose/debug output
-  --help, -h      Show this help message
+  --resume, -r              Auto-resume from saved state without prompting
+  --verbose, -v             Enable verbose/debug output
+  --max-iterations, -m N    Max dev-review cycles per story (default: 10)
+  --help, -h                Show this help message
 
 Description:
   Automates the BMAD implementation phase by orchestrating Claude Code
@@ -61,9 +75,10 @@ Requirements:
   - Git repository (optional, for commits)
 
 Examples:
-  npx johnny-bmad           # Start fresh or prompt to resume
-  npx johnny-bmad --resume  # Auto-resume from last session
-  npx johnny-bmad -v        # Verbose output for debugging
+  npx johnny-bmad              # Start fresh or prompt to resume
+  npx johnny-bmad --resume     # Auto-resume from last session
+  npx johnny-bmad -v           # Verbose output for debugging
+  npx johnny-bmad -m 5         # Limit to 5 dev-review cycles per story
 `);
 }
 
