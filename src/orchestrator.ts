@@ -336,7 +336,13 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     // Commit changes if story completed and we have git
     if (storyComplete && hasGit) {
-      const shouldCommit = await confirmAction(`Commit changes for ${story.id}?`);
+      let shouldCommit: boolean;
+      if (args.yolo) {
+        info('Yolo mode: auto-committing changes');
+        shouldCommit = true;
+      } else {
+        shouldCommit = await confirmAction(`Commit changes for ${story.id}?`);
+      }
       if (shouldCommit) {
         await commitStoryChanges(cwd, story.id, epicStory.title);
       }
