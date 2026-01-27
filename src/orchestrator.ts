@@ -94,7 +94,13 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
   // Priority 3: Fresh start - run SM Agent and select epic
   if (!selectedEpicId) {
     step(1, 4, 'Running SM Agent to check sprint status');
-    await runSmAgent(cwd);
+    try {
+      await runSmAgent(cwd);
+    } catch (smError) {
+      const errorMessage = smError instanceof Error ? smError.message : String(smError);
+      error(`SM agent failed: ${errorMessage}`);
+      warn('Continuing without sprint status check...');
+    }
 
     step(2, 4, 'Loading epics and selecting one to implement');
     const epics = await loadEpics(cwd);
@@ -183,7 +189,25 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     const storyExists = await storyFileExists(cwd, epicStory.id);
     if (!storyExists) {
       info('Story file does not exist, creating...');
-      await runStoryCreator(cwd, epicStory, selectedEpic.id);
+      try {
+        await runStoryCreator(cwd, epicStory, selectedEpic.id);
+      } catch (createError) {
+        const errorMessage = createError instanceof Error ? createError.message : String(createError);
+        error(`Story creator failed: ${errorMessage}`);
+        warn('Retrying story creation...');
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          await runStoryCreator(cwd, epicStory, selectedEpic.id);
+        } catch (retryError) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          error(`Story creator failed on retry: ${retryMessage}`);
+          error('Saving state and exiting. Run johnny-bmad again to resume.');
+          await saveState(cwd, state!);
+          process.exit(1);
+        }
+      }
     }
 
     // Get story details
@@ -204,11 +228,50 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
       info(`Dev-Review iteration ${iteration}/${maxIterations}`);
 
-      // Run Dev Agent
-      await runDevAgent(cwd, story.id, story.filePath);
+      // Run Dev Agent with error handling
+      try {
+        await runDevAgent(cwd, story.id, story.filePath);
+      } catch (devError) {
+        const errorMessage = devError instanceof Error ? devError.message : String(devError);
+        error(`Dev agent failed: ${errorMessage}`);
+        warn('Claude CLI may have encountered an API error. Retrying...');
 
-      // Run Review Agent
-      const reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
+        // Wait a moment before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          await runDevAgent(cwd, story.id, story.filePath);
+        } catch (retryError) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          error(`Dev agent failed on retry: ${retryMessage}`);
+          error('Saving state and exiting. Run johnny-bmad again to resume.');
+          await saveState(cwd, state!);
+          process.exit(1);
+        }
+      }
+
+      // Run Review Agent with error handling
+      let reviewResult;
+      try {
+        reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
+      } catch (reviewError) {
+        const errorMessage = reviewError instanceof Error ? reviewError.message : String(reviewError);
+        error(`Review agent failed: ${errorMessage}`);
+        warn('Claude CLI may have encountered an API error. Retrying...');
+
+        // Wait a moment before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
+        } catch (retryError) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          error(`Review agent failed on retry: ${retryMessage}`);
+          error('Saving state and exiting. Run johnny-bmad again to resume.');
+          await saveState(cwd, state!);
+          process.exit(1);
+        }
+      }
 
       if (reviewResult.passed) {
         storyComplete = true;
@@ -240,7 +303,12 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         case 'complete':
           // Run final dev pass to address last review feedback
           info('Running final dev pass before marking complete...');
-          await runDevAgent(cwd, story.id, story.filePath);
+          try {
+            await runDevAgent(cwd, story.id, story.filePath);
+          } catch (devError) {
+            const errorMessage = devError instanceof Error ? devError.message : String(devError);
+            warn(`Final dev pass failed: ${errorMessage}, marking complete anyway`);
+          }
           successWithTiming(`Marking story ${story.id} as complete (user override)`);
           storyComplete = true;
           break;
