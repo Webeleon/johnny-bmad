@@ -15,7 +15,7 @@
     "build": "bun build src/index.ts --outdir dist --target node",
     "test": "bun test",
     "prepublishOnly": "bun run build",
-    "publish:npm": "npm publish --access public"
+    "publish:npm": "bun run build && npm publish --access public && git tag v$(npm pkg get version | tr -d '\"') && git push origin v$(npm pkg get version | tr -d '\"')"
   },
   "dependencies": {
     "chalk": "^5.4.1",
