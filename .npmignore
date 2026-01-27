@@ -1,0 +1,30 @@
+# Source files
+src/
+tsconfig.json
+bun.lock
+
+# Development
+.claude/
+_bmad/
+.opencode/
+*.test.ts
+
+# Project artifacts
+.johnny-bmad-state.json
+_bmad-output/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.tgz

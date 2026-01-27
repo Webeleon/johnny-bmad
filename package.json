@@ -1,5 +1,5 @@
 {
-  "name": "johnny-bmad",
+  "name": "@webeleon/johnny-bmad",
   "version": "0.1.0",
   "description": "CLI tool to automate BMAD implementation phase using Claude Code",
   "type": "module",
@@ -7,13 +7,15 @@
     "johnny-bmad": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
     "test": "bun test",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "publish:npm": "npm publish --access public"
   },
   "dependencies": {
     "chalk": "^5.4.1",
@@ -32,7 +34,23 @@
     "bmad",
     "claude",
     "automation",
-    "cli"
+    "cli",
+    "ai",
+    "llm",
+    "code-generation"
   ],
+  "author": "Julien Prugne <julien@webeleon.dev>",
+  "contributors": [
+    "Julien Prugne <julien@webeleon.dev>",
+    "Claude (Anthropic)"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webeleon/johnny-bmad.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webeleon/johnny-bmad/issues"
+  },
+  "homepage": "https://github.com/webeleon/johnny-bmad#readme",
   "license": "MIT"
 }
