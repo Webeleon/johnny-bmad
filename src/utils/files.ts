@@ -300,6 +300,27 @@ export function getAllStoriesForEpic(
 }
 
 /**
+ * Get all epics from sprint-status.yaml when no epic files exist.
+ * Falls back to sprint-status data to create synthetic Epic objects.
+ */
+export function getEpicsFromSprintStatus(sprintStatus: SprintStatus | null): Epic[] {
+  if (!sprintStatus?.development_status) return [];
+
+  const epicIds = Object.keys(sprintStatus.development_status)
+    .filter(id => id.startsWith('epic-'));
+
+  return epicIds.map(epicId => {
+    const stories = getAllStoriesForEpic(sprintStatus, epicId);
+    return {
+      id: epicId.replace('epic-', ''),
+      title: `Epic ${epicId.replace('epic-', '')}`,
+      stories: stories.map(s => ({ id: s.id, title: s.id, status: s.status })),
+      filePath: ''
+    };
+  });
+}
+
+/**
  * Update the status of a story or epic in sprint-status.yaml
  */
 export async function updateSprintStatus(

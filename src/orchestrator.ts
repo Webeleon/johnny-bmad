@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { CliArgs, Epic, State } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
-import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, updateSprintStatus, markEpicComplete } from './utils/files.js';
+import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, getEpicsFromSprintStatus, updateSprintStatus, markEpicComplete } from './utils/files.js';
 import { selectEpic, confirmResume, handleMaxIterations, confirmAction } from './utils/user-input.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { runSmAgent } from './agents/sm.js';
@@ -103,10 +103,20 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     }
 
     step(2, 4, 'Loading epics and selecting one to implement');
-    const epics = await loadEpics(cwd);
+    let epics = await loadEpics(cwd);
 
     if (epics.length === 0) {
-      error('No epics found in _bmad-output/planning-artifacts/');
+      // Fallback: load epics from sprint-status.yaml
+      const sprintStatus = await loadSprintStatus(cwd);
+      epics = getEpicsFromSprintStatus(sprintStatus);
+
+      if (epics.length > 0) {
+        warn('No epic files found, using sprint-status.yaml data');
+      }
+    }
+
+    if (epics.length === 0) {
+      error('No epics found in files or sprint-status.yaml');
       error('Run the planning phase first to create epics.');
       process.exit(1);
     }
