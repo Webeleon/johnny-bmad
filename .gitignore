@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# State files (generated at runtime in target projects)
+.johnny-bmad-state.json
+
+# Audio files (TTS generated)
+.claude/audio/

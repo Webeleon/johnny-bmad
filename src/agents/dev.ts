@@ -1,0 +1,21 @@
+import { spawnClaude } from '../claude/cli.js';
+import { getDevStoryPrompt } from '../claude/prompts.js';
+import { info, subHeader } from '../utils/logger.js';
+
+export async function runDevAgent(
+  cwd: string,
+  storyId: string,
+  storyFilePath: string
+): Promise<void> {
+  subHeader(`Dev Agent: ${storyId}`);
+  info('Implementing story...');
+
+  await spawnClaude({
+    model: 'sonnet',
+    prompt: getDevStoryPrompt(storyId, storyFilePath),
+    cwd,
+    allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']
+  });
+
+  info('Dev agent completed');
+}
