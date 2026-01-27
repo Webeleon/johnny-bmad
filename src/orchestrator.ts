@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { CliArgs, Epic, State } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
-import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic } from './utils/files.js';
+import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, updateSprintStatus, markEpicComplete } from './utils/files.js';
 import { selectEpic, confirmResume, handleMaxIterations, confirmAction } from './utils/user-input.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { runSmAgent } from './agents/sm.js';
@@ -335,10 +335,19 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     // Mark story as completed
     state!.completedStories.push(epicStory.id);
     await saveState(cwd, state!);
+
+    // Update sprint-status.yaml to mark story as done
+    if (storyComplete) {
+      await updateSprintStatus(cwd, epicStory.id, 'done');
+    }
   }
 
   // Step 4: Complete
   step(4, 4, 'Epic implementation complete');
+
+  // Mark epic and all stories as done in sprint-status.yaml
+  const allStoryIds = selectedEpic.stories.map(s => s.id);
+  await markEpicComplete(cwd, selectedEpic.id, allStoryIds);
 
   header('Epic Complete');
   successWithTiming(`Epic ${selectedEpic.id} finished!`);

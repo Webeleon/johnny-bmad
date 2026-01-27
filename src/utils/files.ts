@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'fs/promises';
+import { readdir, readFile, writeFile, stat } from 'fs/promises';
 import { join } from 'path';
 import YAML from 'yaml';
 import type { BmadConfig, SprintStatus, Epic, EpicStory, Story, AcceptanceCriterion, OngoingWork } from '../types.js';
@@ -297,4 +297,64 @@ export function getAllStoriesForEpic(
   }
 
   return stories;
+}
+
+/**
+ * Update the status of a story or epic in sprint-status.yaml
+ */
+export async function updateSprintStatus(
+  cwd: string,
+  id: string,
+  status: string
+): Promise<void> {
+  const statusPath = join(cwd, SPRINT_STATUS_PATH);
+
+  try {
+    const content = await readFile(statusPath, 'utf-8');
+    const sprintStatus = YAML.parse(content) as SprintStatus;
+
+    if (!sprintStatus.development_status) {
+      sprintStatus.development_status = {};
+    }
+
+    sprintStatus.development_status[id] = status;
+
+    const newContent = YAML.stringify(sprintStatus);
+    await writeFile(statusPath, newContent, 'utf-8');
+  } catch (err) {
+    debug(`Failed to update sprint-status: ${err}`);
+  }
+}
+
+/**
+ * Mark an epic as done and all its stories as done in sprint-status.yaml
+ */
+export async function markEpicComplete(
+  cwd: string,
+  epicId: string,
+  storyIds: string[]
+): Promise<void> {
+  const statusPath = join(cwd, SPRINT_STATUS_PATH);
+
+  try {
+    const content = await readFile(statusPath, 'utf-8');
+    const sprintStatus = YAML.parse(content) as SprintStatus;
+
+    if (!sprintStatus.development_status) {
+      sprintStatus.development_status = {};
+    }
+
+    // Mark all stories as done
+    for (const storyId of storyIds) {
+      sprintStatus.development_status[storyId] = 'done';
+    }
+
+    // Mark epic as done
+    sprintStatus.development_status[epicId] = 'done';
+
+    const newContent = YAML.stringify(sprintStatus);
+    await writeFile(statusPath, newContent, 'utf-8');
+  } catch (err) {
+    debug(`Failed to mark epic complete: ${err}`);
+  }
 }
