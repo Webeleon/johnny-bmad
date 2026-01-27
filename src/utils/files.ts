@@ -105,7 +105,8 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
     // Parse story entries (various formats)
     if (inStoriesSection) {
       // Format: - [ ] STORY-001: Title or - [x] STORY-001: Title
-      const checkboxMatch = line.match(/^-\s+\[([ x])\]\s+([A-Z]+-\d+):\s*(.+)/i);
+      // Also matches numeric IDs like "8-1-pool-change-feedback"
+      const checkboxMatch = line.match(/^-\s+\[([ x])\]\s+([\w]+-[\w-]+):\s*(.+)/i);
       if (checkboxMatch) {
         stories.push({
           id: checkboxMatch[2],
@@ -115,17 +116,18 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
         continue;
       }
 
-      // Format: - STORY-001: Title
-      const simpleMatch = line.match(/^-\s+([A-Z]+-\d+):\s*(.+)/i);
+      // Format: - STORY-001: Title or - 8-1-pool-change: Title
+      const simpleMatch = line.match(/^-\s+([\w]+-[\w-]+):\s*(.+)/i);
       if (simpleMatch) {
         stories.push({
           id: simpleMatch[1],
           title: simpleMatch[2].trim()
         });
+        continue;
       }
 
-      // Format: 1. STORY-001: Title
-      const numberedMatch = line.match(/^\d+\.\s+([A-Z]+-\d+):\s*(.+)/i);
+      // Format: 1. STORY-001: Title or 1. 8-1-pool-change: Title
+      const numberedMatch = line.match(/^\d+\.\s+([\w]+-[\w-]+):\s*(.+)/i);
       if (numberedMatch) {
         stories.push({
           id: numberedMatch[1],
@@ -269,4 +271,30 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
     stories: actionableStories,
     source: 'sprint-status'
   };
+}
+
+/**
+ * Get all stories for an epic from sprint-status, regardless of status.
+ * This is used as a fallback when epic file parsing returns 0 stories.
+ */
+export function getAllStoriesForEpic(
+  sprintStatus: SprintStatus | null,
+  epicId: string
+): Array<{ id: string; status: string }> {
+  if (!sprintStatus?.development_status) return [];
+
+  // Extract epic number (e.g., "epic-8" → "8")
+  const epicNum = epicId.replace('epic-', '');
+  const stories: Array<{ id: string; status: string }> = [];
+
+  for (const [id, status] of Object.entries(sprintStatus.development_status)) {
+    // Skip epic entries
+    if (id.startsWith('epic-')) continue;
+    // Match stories belonging to this epic (e.g., "8-1-..." for epic-8)
+    if (id.startsWith(`${epicNum}-`)) {
+      stories.push({ id, status });
+    }
+  }
+
+  return stories;
 }

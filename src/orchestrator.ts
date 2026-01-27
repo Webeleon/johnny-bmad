@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { CliArgs, Epic, State } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
-import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork } from './utils/files.js';
+import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic } from './utils/files.js';
 import { selectEpic, confirmResume, handleMaxIterations, confirmAction } from './utils/user-input.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { runSmAgent } from './agents/sm.js';
@@ -133,6 +133,20 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     } else {
       error(`Epic ${selectedEpicId} not found and no story data available`);
       process.exit(1);
+    }
+  }
+
+  // If epic found but has no stories (regex mismatch), try getting from sprint-status
+  if (selectedEpic && selectedEpic.stories.length === 0) {
+    const sprintStatus = await loadSprintStatus(cwd);
+    const allStories = getAllStoriesForEpic(sprintStatus, selectedEpicId!);
+    if (allStories.length > 0) {
+      warn(`Epic file has no parseable stories, using sprint-status data`);
+      selectedEpic.stories = allStories.map(s => ({
+        id: s.id,
+        title: s.id,
+        status: s.status
+      }));
     }
   }
 
