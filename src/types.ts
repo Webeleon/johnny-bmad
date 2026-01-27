@@ -3,6 +3,7 @@ export interface CliArgs {
   help: boolean;
   verbose: boolean;
   maxIterations?: number;
+  yolo: boolean;
 }
 
 export interface BmadConfig {

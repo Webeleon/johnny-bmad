@@ -220,7 +220,14 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     // Handle max iterations exceeded
     if (!storyComplete) {
-      const action = await handleMaxIterations(story.id, maxIterations);
+      let action: 'continue' | 'complete' | 'skip' | 'abort';
+
+      if (args.yolo) {
+        warn(`Yolo mode: auto-completing ${story.id} after ${maxIterations} iterations`);
+        action = 'complete';
+      } else {
+        action = await handleMaxIterations(story.id, maxIterations);
+      }
 
       switch (action) {
         case 'continue':

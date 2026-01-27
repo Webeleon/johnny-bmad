@@ -6,7 +6,8 @@ function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     resume: false,
     help: false,
-    verbose: false
+    verbose: false,
+    yolo: false
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -36,6 +37,10 @@ function parseArgs(argv: string[]): CliArgs {
         }
         break;
       }
+      case '--yolo':
+      case '-y':
+        args.yolo = true;
+        break;
     }
   }
 
@@ -52,6 +57,7 @@ Options:
   --resume, -r              Auto-resume from saved state without prompting
   --verbose, -v             Enable verbose/debug output
   --max-iterations, -m N    Max dev-review cycles per story (default: 10)
+  --yolo, -y                Auto-complete stories when max iterations reached
   --help, -h                Show this help message
 
 Description:
