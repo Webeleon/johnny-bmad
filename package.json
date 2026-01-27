@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
+    "test": "bun test",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {

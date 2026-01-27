@@ -34,6 +34,7 @@ src/
 └── utils/
     ├── logger.ts         # Colored console logging
     ├── files.ts          # BMAD file parsing (epics, stories, config)
+    ├── files.test.ts     # Unit tests for file parsing
     └── user-input.ts     # Inquirer-based user prompts
 ```
 
@@ -62,6 +63,7 @@ bun install          # Install dependencies
 bun run dev          # Run with watch mode
 bun run src/index.ts # Run directly
 bun run build        # Build to dist/
+bun test             # Run unit tests
 npx .                # Test built package
 ```
 
@@ -73,15 +75,27 @@ npx .                # Test built package
 - Prefer `const` declarations
 - Use TypeScript strict mode
 
-## Testing Locally
+## Testing
 
+### Unit Tests
+Tests use Bun's built-in test runner. Test files are co-located with source files using `.test.ts` suffix.
+
+```bash
+bun test             # Run all tests
+bun test --watch     # Run tests in watch mode
+```
+
+Key test coverage:
+- `files.test.ts` - Tests for `findOngoingWork()` and `getAllStoriesForEpic()` sprint-status parsing
+
+### Integration Testing
 Since this tool requires a BMAD project to run, test with:
 ```bash
 bun run src/index.ts --help  # Test CLI parsing
 bun run src/index.ts         # Test BMAD detection (will error without _bmad/)
 ```
 
-For full testing, use in an actual BMAD project directory.
+For full integration testing, use in an actual BMAD project directory.
 
 ## Important Notes
 

@@ -121,13 +121,18 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
   if (!selectedEpic) {
     // Epic not found in files, but we have sprint-status info
     // Build minimal epic from sprint-status data
-    if (ongoingStories.length > 0) {
+    // First try ongoingStories (actionable), then fall back to ALL stories for this epic
+    const sprintStatus = await loadSprintStatus(cwd);
+    const allStoriesForEpic = getAllStoriesForEpic(sprintStatus, selectedEpicId!);
+    const storiesToUse = ongoingStories.length > 0 ? ongoingStories : allStoriesForEpic;
+
+    if (storiesToUse.length > 0) {
       warn(`Epic file not found, using sprint-status data for ${selectedEpicId}`);
       // Create synthetic Epic from sprint-status stories
       selectedEpic = {
         id: selectedEpicId!,
         title: `Epic ${selectedEpicId}`,
-        stories: ongoingStories.map(s => ({ id: s.id, title: s.id, status: s.status })),
+        stories: storiesToUse.map(s => ({ id: s.id, title: s.id, status: s.status })),
         filePath: ''
       };
     } else {
@@ -168,8 +173,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     header(`Story ${i + 1}/${stories.length}: ${epicStory.id}`);
     info(`Title: ${epicStory.title}`);
 
-    // Check if story already completed
-    if (state!.completedStories.includes(epicStory.id)) {
+    // Check if story already completed (from johnny-bmad state or sprint-status)
+    if (state!.completedStories.includes(epicStory.id) || epicStory.status === 'done') {
       info('Story already completed, skipping');
       continue;
     }
