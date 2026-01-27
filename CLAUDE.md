@@ -110,3 +110,9 @@ For full integration testing, use in an actual BMAD project directory.
 4. **Git Safety**: Only commits when explicitly confirmed by user; uses `feat(STORY-ID): title` format
 
 5. **Error Handling**: Non-zero exit from Claude CLI throws errors; orchestrator catches and logs appropriately
+
+6. **Documentation Sync**: When updating CLI options, workflows, or usage patterns, also update:
+   - `README.md` - Quick reference documentation
+   - `docs/index.html` - GitHub Pages full documentation
+
+   Keep both in sync. The docs page includes the interactive banner and full feature documentation

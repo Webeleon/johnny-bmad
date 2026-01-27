@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Johnny BMAD - BMAD Implementation Automation</title>
+    <meta name="description" content="Automates the BMAD implementation phase, one epic at a time. CLI tool orchestrating Claude Code sessions.">
+    <meta property="og:title" content="Johnny BMAD">
+    <meta property="og:description" content="Automates the BMAD implementation phase, one epic at a time.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@400;500;700&family=Share+Tech+Mono&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #e94560;
+            --secondary: #533483;
+            --bg-dark: #0a0a0f;
+            --bg-card: #1a1a2e;
+            --text: #e0e0e0;
+            --text-muted: #888;
+        }
+
+        body {
+            background: var(--bg-dark);
+            font-family: 'Rajdhani', sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* Banner Section */
+        .banner-section {
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+            background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-card) 100%);
+        }
+
+        .banner-container {
+            width: 100%;
+            max-width: 1280px;
+            height: 500px;
+            position: relative;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(83, 52, 131, 0.4) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(233, 69, 96, 0.2) 0%, transparent 50%),
+                linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%);
+            overflow: hidden;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 60px rgba(233, 69, 96, 0.4);
+            cursor: crosshair;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 900px) {
+            .banner-container { height: auto; min-height: 400px; }
+            .content { grid-template-columns: 1fr !important; padding: 30px !important; }
+            .robot-container { display: none !important; }
+            .unit-name { font-size: 60px !important; }
+        }
+
+        .tactical-grid {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background-image:
+                linear-gradient(rgba(233, 69, 96, 0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(233, 69, 96, 0.15) 1px, transparent 1px);
+            background-size: 40px 40px;
+            transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px);
+            animation: gridMove 15s linear infinite;
+            opacity: 0.4;
+        }
+
+        @keyframes gridMove {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0) translateZ(-200px); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(40px) translateZ(-200px); }
+        }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.4) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.6;
+        }
+
+        .content {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 40px;
+            gap: 40px;
+        }
+
+        .robot-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .robot-head {
+            width: 280px;
+            height: 320px;
+            position: relative;
+            filter: drop-shadow(0 0 30px rgba(83, 52, 131, 0.6));
+            transition: transform 0.1s ease-out;
+        }
+
+        .helmet {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #2a2a3e 0%, #1e1e2f 100%);
+            clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+            border: 3px solid var(--secondary);
+            box-shadow: inset 0 0 40px rgba(83, 52, 131, 0.5);
+        }
+
+        .visor {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            height: 80px;
+            background: linear-gradient(to bottom, #0a0a0f, #1a1a2e);
+            border: 2px solid var(--primary);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+
+        .eyes-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 130px;
+            height: 35px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .eye {
+            width: 50px;
+            height: 25px;
+            background: #000;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid var(--secondary);
+            animation: eyePulse 3s ease-in-out infinite;
+        }
+
+        @keyframes eyePulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(83, 52, 131, 0.8); }
+            50% { box-shadow: 0 0 20px rgba(233, 69, 96, 1); }
+        }
+
+        .pupil {
+            width: 16px;
+            height: 16px;
+            background: radial-gradient(circle at 30% 30%, var(--primary), #ff0040);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px var(--primary);
+            transition: transform 0.05s ease-out;
+        }
+
+        .mouth {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 35px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mouth-line {
+            height: 6px;
+            background: linear-gradient(90deg, transparent, var(--secondary), var(--primary), var(--secondary), transparent);
+            border-radius: 3px;
+            opacity: 0.8;
+        }
+
+        .antenna {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 30px;
+            background: var(--secondary);
+        }
+
+        .antenna::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 20px var(--primary);
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .corner-decoration {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border: 2px solid var(--primary);
+            opacity: 0.6;
+        }
+
+        .corner-tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+        .corner-tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+        .corner-bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+        .corner-br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+
+        .unit-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            color: white;
+        }
+
+        .faction-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(83, 52, 131, 0.3);
+            color: var(--primary);
+            padding: 6px 14px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            letter-spacing: 3px;
+            border: 1px solid var(--secondary);
+            margin-bottom: 15px;
+            width: fit-content;
+        }
+
+        .unit-name {
+            font-family: 'Black Ops One', cursive;
+            font-size: 80px;
+            line-height: 0.9;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #fff 0%, var(--primary) 50%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 4px;
+            filter: drop-shadow(0 0 20px rgba(233, 69, 96, 0.5));
+        }
+
+        .unit-class {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            color: var(--secondary);
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+        }
+
+        .tagline {
+            font-size: 20px;
+            color: var(--text);
+            margin-bottom: 25px;
+            max-width: 400px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            text-decoration: none;
+            border: 2px solid;
+            transition: all 0.3s;
+            letter-spacing: 1px;
+        }
+
+        .cta-btn.primary {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .cta-btn.primary:hover {
+            background: transparent;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+
+        .cta-btn.secondary {
+            background: transparent;
+            border-color: var(--secondary);
+            color: var(--text);
+        }
+
+        .cta-btn.secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Documentation Section */
+        .docs-section {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+
+        h2 {
+            font-family: 'Black Ops One', cursive;
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--secondary);
+        }
+
+        h3 {
+            font-size: 22px;
+            color: var(--text);
+            margin: 30px 0 15px;
+            font-weight: 700;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        code {
+            font-family: 'Share Tech Mono', monospace;
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: var(--primary);
+            font-size: 16px;
+        }
+
+        pre {
+            background: var(--bg-card);
+            border: 1px solid var(--secondary);
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text);
+        }
+
+        .options-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .options-table th,
+        .options-table td {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(83, 52, 131, 0.3);
+        }
+
+        .options-table th {
+            background: var(--bg-card);
+            color: var(--primary);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        .options-table td {
+            font-size: 16px;
+        }
+
+        .options-table code {
+            white-space: nowrap;
+        }
+
+        ul, ol {
+            margin: 15px 0 15px 30px;
+            font-size: 18px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .workflow-diagram {
+            background: var(--bg-card);
+            border: 1px solid var(--secondary);
+            border-radius: 8px;
+            padding: 25px;
+            margin: 20px 0;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            overflow-x: auto;
+        }
+
+        .requirements-list {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .requirements-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 0;
+        }
+
+        .requirements-list li::before {
+            content: '>';
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-card);
+            border-top: 1px solid var(--secondary);
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        .footer-credit {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .footer-credit a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Banner Section -->
+    <section class="banner-section">
+        <div class="banner-container" id="banner">
+            <div class="tactical-grid"></div>
+
+            <div class="corner-decoration corner-tl"></div>
+            <div class="corner-decoration corner-tr"></div>
+            <div class="corner-decoration corner-bl"></div>
+            <div class="corner-decoration corner-br"></div>
+
+            <div class="scanlines"></div>
+
+            <div class="content">
+                <div class="robot-container">
+                    <div class="robot-head" id="robotHead">
+                        <div class="antenna"></div>
+                        <div class="helmet"></div>
+                        <div class="visor">
+                            <div class="eyes-container">
+                                <div class="eye" id="leftEye">
+                                    <div class="pupil" id="leftPupil"></div>
+                                </div>
+                                <div class="eye" id="rightEye">
+                                    <div class="pupil" id="rightPupil"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mouth">
+                            <div class="mouth-line"></div>
+                            <div class="mouth-line"></div>
+                            <div class="mouth-line"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="unit-info">
+                    <div class="faction-badge">WEBELEON // TACTICAL_DIVISION</div>
+                    <h1 class="unit-name">JOHNNY BMAD</h1>
+                    <div class="unit-class">AUTONOMOUS_DEPLOYMENT_UNIT</div>
+                    <p class="tagline">Automates the BMAD implementation phase, one epic at a time. Inspired by Ralph.</p>
+                    <div class="cta-buttons">
+                        <a href="https://github.com/webeleon/johnny-bmad" class="cta-btn primary">GitHub</a>
+                        <a href="https://discord.gg/AK7BNxJByt" class="cta-btn secondary">Discord</a>
+                        <a href="https://www.npmjs.com/package/@webeleon/johnny-bmad" class="cta-btn secondary">npm</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation -->
+    <main class="docs-section">
+        <h2>Installation</h2>
+        <pre><code>npm install -g @webeleon/johnny-bmad</code></pre>
+
+        <h2>Usage</h2>
+        <pre><code>cd your-bmad-project
+johnny-bmad</code></pre>
+
+        <p>That's it. Johnny will:</p>
+        <ol>
+            <li>Check your sprint status</li>
+            <li>Let you pick an epic</li>
+            <li>For each story: create it, implement it, review it, commit it</li>
+            <li>Repeat until the epic is done</li>
+        </ol>
+
+        <h3>CLI Options</h3>
+        <table class="options-table">
+            <thead>
+                <tr>
+                    <th>Option</th>
+                    <th>Short</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--resume</code></td>
+                    <td><code>-r</code></td>
+                    <td>Auto-resume from saved state without prompting</td>
+                </tr>
+                <tr>
+                    <td><code>--verbose</code></td>
+                    <td><code>-v</code></td>
+                    <td>Enable debug output for troubleshooting</td>
+                </tr>
+                <tr>
+                    <td><code>--max-iterations N</code></td>
+                    <td><code>-m N</code></td>
+                    <td>Max dev-review cycles per story (default: 10)</td>
+                </tr>
+                <tr>
+                    <td><code>--yolo</code></td>
+                    <td><code>-y</code></td>
+                    <td>Auto-complete stories when max iterations reached</td>
+                </tr>
+                <tr>
+                    <td><code>--help</code></td>
+                    <td><code>-h</code></td>
+                    <td>Show help message</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Examples</h3>
+        <pre><code>johnny-bmad                 # Start fresh or prompt to resume
+johnny-bmad --resume        # Auto-resume from last session
+johnny-bmad -v              # Verbose output for debugging
+johnny-bmad -m 5            # Limit to 5 dev-review cycles
+johnny-bmad --yolo          # YOLO mode: auto-mark done at max iterations
+johnny-bmad -m 3 -y         # 3 iterations max, auto-complete if stuck</code></pre>
+
+        <h2>Requirements</h2>
+        <ul class="requirements-list">
+            <li><strong>BMAD Project</strong> with <code>_bmad/</code> folder</li>
+            <li><strong>Claude Code CLI</strong> (<code>claude</code> command in PATH)</li>
+            <li><strong>Node.js 18+</strong></li>
+            <li><strong>Git</strong> (optional, for auto-commits)</li>
+        </ul>
+
+        <h2>How It Works</h2>
+        <div class="workflow-diagram">
+SM Agent (opus)           -> Check sprint status
+        |
+User selects epic
+        |
++---------------------------------------+
+|  For each story:                      |
+|                                       |
+|  Story Creator (opus)  -> Create      |
+|          |                            |
+|  Dev Agent (sonnet)    -> Implement   |
+|          |                            |
+|  Reviewer (opus)       -> Review      |
+|          |                            |
+|  Git commit (if passed)               |
++---------------------------------------+
+        </div>
+
+        <p>Stories loop through dev -> review until the reviewer marks them done. Default max is 10 iterations per story, then you're prompted to continue, skip, or abort. Use <code>--yolo</code> to auto-complete stuck stories.</p>
+
+        <h3>Agent Roles</h3>
+        <table class="options-table">
+            <thead>
+                <tr>
+                    <th>Agent</th>
+                    <th>Model</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SM Agent</td>
+                    <td>opus</td>
+                    <td>Check sprint status, initialize planning</td>
+                </tr>
+                <tr>
+                    <td>Story Creator</td>
+                    <td>opus</td>
+                    <td>Create detailed story files with acceptance criteria</td>
+                </tr>
+                <tr>
+                    <td>Dev Agent</td>
+                    <td>sonnet</td>
+                    <td>Implement the story</td>
+                </tr>
+                <tr>
+                    <td>Reviewer</td>
+                    <td>opus</td>
+                    <td>Code review, mark story done when complete</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>State Persistence</h3>
+        <p>Progress saves to <code>.johnny-bmad-state.json</code>. If interrupted:</p>
+        <pre><code>johnny-bmad --resume  # Pick up where you left off</code></pre>
+
+        <h2>BMAD Project Structure</h2>
+        <p>The tool expects this structure:</p>
+        <pre><code>your-project/
+├── _bmad/
+│   └── bmm/
+│       └── config.yaml           # Project configuration
+├── _bmad-output/
+│   ├── planning-artifacts/
+│   │   └── epic-*.md             # Epic definitions
+│   └── implementation-artifacts/
+│       ├── sprint-status.yaml    # Sprint state
+│       └── story-*.md            # Story files</code></pre>
+
+        <h2>Development</h2>
+        <pre><code>git clone https://github.com/webeleon/johnny-bmad.git
+cd johnny-bmad
+bun install
+
+bun run dev          # Watch mode
+bun run build        # Build to dist/
+bun test             # Run tests</code></pre>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="https://github.com/webeleon/johnny-bmad">GitHub</a>
+            <a href="https://discord.gg/AK7BNxJByt">Discord</a>
+            <a href="https://www.npmjs.com/package/@webeleon/johnny-bmad">npm</a>
+        </div>
+        <p class="footer-credit">
+            Made with robots by <a href="https://webeleon.dev">Webeleon</a>
+        </p>
+    </footer>
+
+    <script>
+        const banner = document.getElementById('banner');
+        const leftPupil = document.getElementById('leftPupil');
+        const rightPupil = document.getElementById('rightPupil');
+        const robotHead = document.getElementById('robotHead');
+
+        if (banner && leftPupil && rightPupil) {
+            document.addEventListener('mousemove', (e) => {
+                const leftEye = document.getElementById('leftEye');
+                const rightEye = document.getElementById('rightEye');
+                if (!leftEye || !rightEye) return;
+
+                const leftEyeRect = leftEye.getBoundingClientRect();
+                const rightEyeRect = rightEye.getBoundingClientRect();
+
+                const leftEyeCenter = {
+                    x: leftEyeRect.left + leftEyeRect.width / 2,
+                    y: leftEyeRect.top + leftEyeRect.height / 2
+                };
+
+                const rightEyeCenter = {
+                    x: rightEyeRect.left + rightEyeRect.width / 2,
+                    y: rightEyeRect.top + rightEyeRect.height / 2
+                };
+
+                const maxMove = 12;
+
+                const leftAngle = Math.atan2(e.clientY - leftEyeCenter.y, e.clientX - leftEyeCenter.x);
+                const leftDist = Math.min(maxMove, Math.hypot(e.clientX - leftEyeCenter.x, e.clientY - leftEyeCenter.y) / 10);
+                leftPupil.style.transform = `translate(calc(-50% + ${Math.cos(leftAngle) * leftDist}px), calc(-50% + ${Math.sin(leftAngle) * leftDist}px))`;
+
+                const rightAngle = Math.atan2(e.clientY - rightEyeCenter.y, e.clientX - rightEyeCenter.x);
+                const rightDist = Math.min(maxMove, Math.hypot(e.clientX - rightEyeCenter.x, e.clientY - rightEyeCenter.y) / 10);
+                rightPupil.style.transform = `translate(calc(-50% + ${Math.cos(rightAngle) * rightDist}px), calc(-50% + ${Math.sin(rightAngle) * rightDist}px))`;
+
+                if (robotHead) {
+                    const headRect = robotHead.getBoundingClientRect();
+                    const headTiltX = (e.clientX - (headRect.left + headRect.width / 2)) / 80;
+                    const headTiltY = (e.clientY - (headRect.top + headRect.height / 2)) / 80;
+                    robotHead.style.transform = `rotateY(${headTiltX}deg) rotateX(${-headTiltY}deg)`;
+                }
+            });
+
+            function blink() {
+                leftPupil.style.height = '2px';
+                rightPupil.style.height = '2px';
+                setTimeout(() => {
+                    leftPupil.style.height = '16px';
+                    rightPupil.style.height = '16px';
+                }, 150);
+                setTimeout(blink, Math.random() * 3000 + 2000);
+            }
+            setTimeout(blink, 2000);
+        }
+    </script>
+</body>
+</html>

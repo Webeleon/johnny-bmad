@@ -3,6 +3,9 @@ src/
 tsconfig.json
 bun.lock
 
+# Documentation site
+docs/
+
 # Development
 .claude/
 _bmad/
