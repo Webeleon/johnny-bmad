@@ -4,7 +4,13 @@ import type { CliArgs } from './types.js';
 
 // Global handler for unhandled promise rejections
 process.on('unhandledRejection', (reason, _promise) => {
-  console.error('\n[johnny-bmad] Unhandled rejection detected:');
+  const now = new Date().toLocaleString();
+  const uptimeSec = Math.floor(process.uptime());
+  const mins = Math.floor(uptimeSec / 60);
+  const secs = uptimeSec % 60;
+  const uptime = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  console.error(`\n[johnny-bmad] Unhandled rejection at ${now} (uptime: ${uptime}):`);
   console.error(reason);
   console.error('\nThis is often caused by Claude CLI encountering an API error.');
   console.error('Run johnny-bmad again to resume from saved state.\n');
