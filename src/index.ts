@@ -2,6 +2,15 @@
 import { runOrchestrator } from './orchestrator.js';
 import type { CliArgs } from './types.js';
 
+// Global handler for unhandled promise rejections
+process.on('unhandledRejection', (reason, _promise) => {
+  console.error('\n[johnny-bmad] Unhandled rejection detected:');
+  console.error(reason);
+  console.error('\nThis is often caused by Claude CLI encountering an API error.');
+  console.error('Run johnny-bmad again to resume from saved state.\n');
+  process.exit(1);
+});
+
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     resume: false,
