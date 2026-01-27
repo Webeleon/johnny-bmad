@@ -3,11 +3,12 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parse as parseYaml } from 'yaml';
 import { getReviewStoryPrompt } from '../claude/prompts.js';
-import { info, subHeader, debug } from '../utils/logger.js';
+import { info, subHeader, debug, infoWithTiming } from '../utils/logger.js';
 
 export interface ReviewResult {
   passed: boolean;
   output: string;
+  durationMs: number;
 }
 
 export function runReviewAgent(
@@ -16,6 +17,8 @@ export function runReviewAgent(
   storyFilePath: string
 ): Promise<ReviewResult> {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+
     subHeader(`Review Agent: ${storyId}`);
     info('Reviewing implementation...');
 
@@ -38,6 +41,8 @@ export function runReviewAgent(
     });
 
     proc.on('close', (code) => {
+      const durationMs = Date.now() - startTime;
+
       if (code !== 0) {
         reject(new Error(`Review agent exited with code ${code}`));
         return;
@@ -55,22 +60,22 @@ export function runReviewAgent(
         const passed = storyStatus === 'done';
 
         if (passed) {
-          info('Review PASSED - story marked done in sprint-status.yaml');
-          resolve({ passed: true, output });
+          infoWithTiming('Review PASSED - story marked done in sprint-status.yaml', durationMs);
+          resolve({ passed: true, output, durationMs });
         } else {
-          info(`Review FAILED - story status is "${storyStatus}"`);
-          resolve({ passed: false, output });
+          infoWithTiming(`Review FAILED - story status is "${storyStatus}"`, durationMs);
+          resolve({ passed: false, output, durationMs });
         }
       } catch (err) {
         // Fall back to stdout detection if yaml read fails
         debug(`Failed to read sprint-status.yaml: ${err}`);
         const passed = output.includes('REVIEW_PASSED');
         if (passed) {
-          info('Review PASSED (detected from output)');
-          resolve({ passed: true, output });
+          infoWithTiming('Review PASSED (detected from output)', durationMs);
+          resolve({ passed: true, output, durationMs });
         } else {
-          info('Review status unclear - treating as needs more work');
-          resolve({ passed: false, output });
+          infoWithTiming('Review status unclear - treating as needs more work', durationMs);
+          resolve({ passed: false, output, durationMs });
         }
       }
     });

@@ -1,9 +1,11 @@
 import { spawn } from 'child_process';
-import type { ClaudeOptions } from '../types.js';
+import type { ClaudeOptions, ClaudeResult } from '../types.js';
 import { debug } from '../utils/logger.js';
 
-export function spawnClaude(opts: ClaudeOptions): Promise<void> {
+export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+
     const args: string[] = [
       '--model', opts.model,
       '-p', opts.prompt
@@ -23,10 +25,11 @@ export function spawnClaude(opts: ClaudeOptions): Promise<void> {
     });
 
     proc.on('close', (code) => {
+      const durationMs = Date.now() - startTime;
       if (code !== 0) {
         reject(new Error(`Claude exited with code ${code}`));
       } else {
-        resolve();
+        resolve({ durationMs });
       }
     });
 

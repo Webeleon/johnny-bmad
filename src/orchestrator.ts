@@ -9,12 +9,16 @@ import { runStoryCreator } from './agents/story-creator.js';
 import { runDevAgent } from './agents/dev.js';
 import { runReviewAgent } from './agents/reviewer.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
-import { info, error, success, warn, header, step, setVerbose } from './utils/logger.js';
+import { info, error, success, warn, header, step, setVerbose, successWithTiming } from './utils/logger.js';
+import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
 
 const MAX_DEV_REVIEW_ITERATIONS = 10;
 
 export async function runOrchestrator(args: CliArgs): Promise<void> {
   const cwd = process.cwd();
+
+  // Start session timer
+  startSessionTimer();
 
   if (args.verbose) {
     setVerbose(true);
@@ -51,7 +55,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     warn('Not a git repository - commits will be skipped');
   }
 
-  success('Pre-flight checks passed');
+  successWithTiming('Pre-flight checks passed');
 
   // Check for ongoing work FIRST (before loading epics or running SM Agent)
   info('Checking for ongoing work...');
@@ -189,7 +193,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
       if (reviewResult.passed) {
         storyComplete = true;
-        success(`Story ${story.id} completed!`);
+        successWithTiming(`Story ${story.id} completed!`);
       } else {
         warn('Review found issues, running another dev cycle...');
       }
@@ -235,8 +239,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
   step(4, 4, 'Epic implementation complete');
 
   header('Epic Complete');
-  success(`Epic ${selectedEpic.id} finished!`);
-  success(`Completed ${state!.completedStories.length} stories`);
+  successWithTiming(`Epic ${selectedEpic.id} finished!`);
+  success(`Completed ${state!.completedStories.length} stories (total: ${getSessionElapsed()})`);
 
   // Clear state for this epic
   await clearState(cwd);

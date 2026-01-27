@@ -85,3 +85,7 @@ export interface ClaudeOptions {
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'success';
+
+export interface ClaudeResult {
+  durationMs: number;
+}

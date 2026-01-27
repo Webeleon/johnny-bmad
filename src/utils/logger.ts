@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { LogLevel } from '../types.js';
+import { formatDuration, getSessionElapsed } from './timer.js';
 
 let verboseMode = false;
 
@@ -69,4 +70,40 @@ export function subHeader(title: string): void {
 
 export function step(stepNum: number, total: number, message: string): void {
   console.log(chalk.magenta(`[${stepNum}/${total}]`), message);
+}
+
+/**
+ * Log a message with timing information.
+ * @param level - Log level (info, success, etc.)
+ * @param message - The message to log
+ * @param agentDurationMs - Optional agent-specific duration in milliseconds
+ */
+export function logWithTiming(
+  level: LogLevel,
+  message: string,
+  agentDurationMs?: number
+): void {
+  const parts = [message];
+
+  if (agentDurationMs !== undefined) {
+    parts.push(chalk.cyan(`(${formatDuration(agentDurationMs)})`));
+  }
+
+  parts.push(chalk.gray(`(total: ${getSessionElapsed()})`));
+
+  log(level, parts.join(' '));
+}
+
+/**
+ * Convenience function for info log with timing.
+ */
+export function infoWithTiming(message: string, agentDurationMs?: number): void {
+  logWithTiming('info', message, agentDurationMs);
+}
+
+/**
+ * Convenience function for success log with timing.
+ */
+export function successWithTiming(message: string, agentDurationMs?: number): void {
+  logWithTiming('success', message, agentDurationMs);
 }

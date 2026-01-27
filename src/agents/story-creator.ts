@@ -1,6 +1,6 @@
 import { spawnClaude } from '../claude/cli.js';
 import { getCreateStoryPrompt } from '../claude/prompts.js';
-import { info, subHeader } from '../utils/logger.js';
+import { info, subHeader, infoWithTiming } from '../utils/logger.js';
 import type { EpicStory } from '../types.js';
 
 export async function runStoryCreator(
@@ -11,12 +11,12 @@ export async function runStoryCreator(
   subHeader(`Creating Story: ${story.id}`);
   info(`Story: ${story.title}`);
 
-  await spawnClaude({
+  const { durationMs } = await spawnClaude({
     model: 'opus',
     prompt: getCreateStoryPrompt(story.id, story.title, epicId),
     cwd,
     allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep']
   });
 
-  info('Story creation completed');
+  infoWithTiming('Story creation completed', durationMs);
 }
