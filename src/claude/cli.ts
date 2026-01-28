@@ -25,15 +25,21 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
       agentLifecycle(opts.agentRole, 'start');
     }
 
-    // Determine stdio configuration based on verbose mode and agent role
-    const stdio = (isVerbose() && opts.agentRole)
-      ? ['inherit' as const, createLabeledStream(opts.agentRole, 'stdout', process.stdout), createLabeledStream(opts.agentRole, 'stderr', process.stderr)]
-      : 'inherit';
+    // Determine if we need labeled output for verbose mode
+    const useLabeled = isVerbose() && opts.agentRole;
 
     const proc = spawn('claude', args, {
       cwd: opts.cwd,
-      stdio
+      stdio: useLabeled ? ['inherit', 'pipe', 'pipe'] : 'inherit'
     });
+
+    // In verbose mode, pipe through labeled streams
+    if (useLabeled && proc.stdout && proc.stderr) {
+      const stdoutStream = createLabeledStream(opts.agentRole!, 'stdout', process.stdout);
+      const stderrStream = createLabeledStream(opts.agentRole!, 'stderr', process.stderr);
+      proc.stdout.pipe(stdoutStream);
+      proc.stderr.pipe(stderrStream);
+    }
 
     proc.on('close', (code) => {
       const durationMs = Date.now() - startTime;

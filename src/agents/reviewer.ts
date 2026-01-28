@@ -29,19 +29,22 @@ export function runReviewAgent(
 
     const prompt = getReviewStoryPrompt(storyId, storyFilePath);
 
-    // Determine stderr stream based on verbose mode
-    const stderrStream = isVerbose()
-      ? createLabeledStream('Review', 'stderr', process.stderr)
-      : 'inherit';
+    const verbose = isVerbose();
 
     const proc = spawn(
       'claude',
       ['--model', 'opus', '-p', prompt, '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep'],
       {
         cwd,
-        stdio: ['inherit', 'pipe', stderrStream]
+        stdio: ['inherit', 'pipe', verbose ? 'pipe' : 'inherit']
       }
     );
+
+    // In verbose mode, pipe stderr through labeled stream
+    if (verbose && proc.stderr) {
+      const stderrStream = createLabeledStream('Review', 'stderr', process.stderr);
+      proc.stderr.pipe(stderrStream);
+    }
 
     const chunks: Buffer[] = [];
 

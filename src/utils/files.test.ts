@@ -27,7 +27,7 @@ describe('findOngoingWork', () => {
       development_status: {
         'epic-1': 'in-progress',
         '1-1-story-one': 'in-progress',
-        '1-2-story-two': 'backlog'
+        '1-2-story-two': 'done'
       }
     };
     const result = findOngoingWork(status);
@@ -56,9 +56,8 @@ describe('findOngoingWork', () => {
     expect(result!.stories[0].id).toBe('2-2-story-two');
   });
 
-  test('returns epic when all stories done or backlog (regression test for kanas-dojo)', () => {
-    // This is the scenario that caused the original bug:
-    // epic is in-progress, but no stories are actionable (all done or backlog)
+  test('returns epic with backlog stories as actionable', () => {
+    // Backlog stories should now be picked up as actionable work
     const status: SprintStatus = {
       generated: '2026-01-18',
       project: 'kana-quizz',
@@ -72,11 +71,28 @@ describe('findOngoingWork', () => {
       }
     };
     const result = findOngoingWork(status);
-    // Note: findOngoingWork returns the epic even with empty actionable stories
-    // The orchestrator should handle this by falling back to getAllStoriesForEpic
     expect(result).not.toBeNull();
     expect(result!.epicId).toBe('epic-8');
-    expect(result!.stories).toHaveLength(0); // No actionable stories
+    expect(result!.stories).toHaveLength(2); // backlog stories are now actionable
+    expect(result!.stories.map(s => s.id)).toContain('8-2-pool-reset-function');
+    expect(result!.stories.map(s => s.id)).toContain('8-3-pool-resize-function');
+  });
+
+  test('returns null when epic and all stories are done', () => {
+    // When everything is done, there's no ongoing work
+    const status: SprintStatus = {
+      generated: '2026-01-18',
+      project: 'test',
+      tracking_system: 'file-system',
+      story_location: '_bmad-output/implementation-artifacts',
+      development_status: {
+        'epic-1': 'done',
+        '1-1-story-one': 'done',
+        '1-2-story-two': 'done'
+      }
+    };
+    const result = findOngoingWork(status);
+    expect(result).toBeNull();
   });
 
   test('derives epic ID from story ID when epic entry missing', () => {

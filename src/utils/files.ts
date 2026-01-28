@@ -234,43 +234,61 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
   if (!sprintStatus?.development_status) return null;
 
   const entries = Object.entries(sprintStatus.development_status);
-  const actionableStatuses = ['review', 'in-progress', 'ready-for-dev'];
+  const actionableStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
+  const incompleteStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
 
   // Separate epics and stories (epics start with "epic-")
-  let inProgressEpicId: string | null = null;
+  const inProgressEpics: string[] = [];
   const actionableStories: Array<{ id: string; status: string }> = [];
 
   for (const [id, status] of entries) {
     if (id.startsWith('epic-')) {
       if (status === 'in-progress') {
-        inProgressEpicId = id;
+        inProgressEpics.push(id);
       }
     } else if (actionableStatuses.includes(status)) {
       actionableStories.push({ id, status });
     }
   }
 
-  if (actionableStories.length === 0 && !inProgressEpicId) {
-    return null;
-  }
-
-  // Derive epic from story ID (e.g., "1-5-node-selection" → "epic-1")
-  let epicId: string;
+  // If we have actionable stories, use the first one's epic
   if (actionableStories.length > 0) {
     const storyId = actionableStories[0].id;
     const epicNum = storyId.split('-')[0];
-    epicId = `epic-${epicNum}`;
-  } else if (inProgressEpicId) {
-    epicId = inProgressEpicId;
-  } else {
-    return null;
+    return {
+      epicId: `epic-${epicNum}`,
+      stories: actionableStories,
+      source: 'sprint-status'
+    };
   }
 
-  return {
-    epicId,
-    stories: actionableStories,
-    source: 'sprint-status'
-  };
+  // If we have in-progress epics, check if they actually have remaining work
+  for (const epicId of inProgressEpics) {
+    const epicNum = epicId.replace('epic-', '');
+    const epicStories = entries.filter(([id]) =>
+      !id.startsWith('epic-') && id.startsWith(`${epicNum}-`)
+    );
+
+    // Check if any story is NOT done
+    const hasIncompleteWork = epicStories.some(([, status]) =>
+      incompleteStatuses.includes(status)
+    );
+
+    if (hasIncompleteWork) {
+      const stories = epicStories
+        .filter(([, status]) => actionableStatuses.includes(status))
+        .map(([id, status]) => ({ id, status }));
+      return {
+        epicId,
+        stories,
+        source: 'sprint-status'
+      };
+    }
+    // If all stories are done but epic still marked in-progress, skip it
+    debug(`Epic ${epicId} marked in-progress but all stories done, skipping`);
+  }
+
+  return null;
 }
 
 /**
@@ -302,12 +320,15 @@ export function getAllStoriesForEpic(
 /**
  * Get all epics from sprint-status.yaml when no epic files exist.
  * Falls back to sprint-status data to create synthetic Epic objects.
+ * Filters out epics that are already done.
  */
 export function getEpicsFromSprintStatus(sprintStatus: SprintStatus | null): Epic[] {
   if (!sprintStatus?.development_status) return [];
 
-  const epicIds = Object.keys(sprintStatus.development_status)
-    .filter(id => id.startsWith('epic-'));
+  const devStatus = sprintStatus.development_status;
+  const epicIds = Object.keys(devStatus)
+    .filter(id => id.startsWith('epic-'))
+    .filter(id => devStatus[id] !== 'done');
 
   return epicIds.map(epicId => {
     const stories = getAllStoriesForEpic(sprintStatus, epicId);
@@ -365,17 +386,27 @@ export async function markEpicComplete(
       sprintStatus.development_status = {};
     }
 
+    // Normalize epicId - ensure it has 'epic-' prefix
+    const normalizedEpicId = epicId.startsWith('epic-') ? epicId : `epic-${epicId}`;
+
     // Mark all stories as done
     for (const storyId of storyIds) {
       sprintStatus.development_status[storyId] = 'done';
     }
 
-    // Mark epic as done
-    sprintStatus.development_status[epicId] = 'done';
+    // Mark epic as done (try both formats to ensure we update the right key)
+    sprintStatus.development_status[normalizedEpicId] = 'done';
+    // Also mark without prefix if it exists
+    const shortId = epicId.replace('epic-', '');
+    if (sprintStatus.development_status[shortId] !== undefined) {
+      sprintStatus.development_status[shortId] = 'done';
+    }
 
     const newContent = YAML.stringify(sprintStatus);
     await writeFile(statusPath, newContent, 'utf-8');
+    debug(`Marked epic ${normalizedEpicId} and ${storyIds.length} stories as done`);
   } catch (err) {
-    debug(`Failed to mark epic complete: ${err}`);
+    // Log error more visibly - this is important
+    console.error(`Failed to mark epic complete: ${err}`);
   }
 }
