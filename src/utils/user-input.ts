@@ -81,3 +81,15 @@ export async function promptForInput(message: string): Promise<string> {
 
   return input;
 }
+
+export async function confirmContinueNextEpic(nextEpicId: string): Promise<boolean> {
+  const { continueNext } = await inquirer.prompt<{ continueNext: boolean }>([
+    {
+      type: 'confirm',
+      name: 'continueNext',
+      message: `Epic complete! Continue with next epic (${nextEpicId})?`,
+      default: true
+    }
+  ]);
+  return continueNext;
+}

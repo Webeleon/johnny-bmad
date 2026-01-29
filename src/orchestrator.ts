@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { CliArgs, Epic, State } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
 import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, getEpicsFromSprintStatus, updateSprintStatus, markEpicComplete } from './utils/files.js';
-import { selectEpic, confirmResume, handleMaxIterations, confirmAction } from './utils/user-input.js';
+import { selectEpic, confirmResume, handleMaxIterations, confirmAction, confirmContinueNextEpic } from './utils/user-input.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { runSmAgent } from './agents/sm.js';
 import { runStoryCreator } from './agents/story-creator.js';
@@ -384,8 +384,21 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     const nextWork = findOngoingWork(nextSprintStatus);
 
     if (nextWork) {
-      console.log(chalk.cyan(`\nFound more work: epic ${nextWork.epicId}. Continuing...\n`));
-      // Loop will continue to next epic
+      let shouldContinue: boolean;
+      if (args.yolo) {
+        info('Yolo mode: auto-continuing to next epic');
+        shouldContinue = true;
+      } else {
+        shouldContinue = await confirmContinueNextEpic(nextWork.epicId);
+      }
+
+      if (shouldContinue) {
+        console.log(chalk.cyan(`\nContinuing with epic ${nextWork.epicId}...\n`));
+        // Loop continues to next epic
+      } else {
+        console.log(chalk.yellow('Stopping at user request. Run johnny-bmad again to continue.'));
+        continueProcessing = false;
+      }
     } else {
       console.log(chalk.yellow('No more epics with pending work. All done!'));
       console.log();
