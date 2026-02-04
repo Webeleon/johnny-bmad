@@ -54,6 +54,16 @@ johnny-bmad -m 3 -y         # 3 iterations max, auto-complete if stuck
 - **Node.js 18+**
 - **Git** (optional, for auto-commits)
 
+### BMAD Framework Setup
+
+This project uses the BMAD methodology. To install the required framework:
+
+```bash
+# TODO: User to provide installation commands
+```
+
+The `_bmad/` framework files are gitignored - each developer installs their own copy.
+
 ## How It Works
 
 ```

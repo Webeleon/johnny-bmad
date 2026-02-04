@@ -25,3 +25,12 @@ dist/
 
 # Audio files (TTS generated)
 .claude/audio/
+
+# BMAD Framework (installed separately)
+_bmad/
+
+# Claude Code config (user-specific)
+.claude/
+
+# OpenCode config (user-specific)
+.opencode/
