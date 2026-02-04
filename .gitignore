@@ -22,6 +22,7 @@ dist/
 
 # State files (generated at runtime in target projects)
 .johnny-bmad-state.json
+.test-state
 
 # Audio files (TTS generated)
 .claude/audio/

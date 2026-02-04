@@ -73,7 +73,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     if (state) {
       selectedEpicId = state.currentEpic;
       success(`Resuming ongoing session: ${state.currentEpic}`);
-      info(`Story index: ${state.currentStoryIndex}, Completed: ${state.completedStories.length}`);
+      info(`Story index: ${state.workflow.currentStoryIndex}, Completed: ${state.stories.completed.length}`);
       autoStarted = true;
     }
 
@@ -86,6 +86,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         selectedEpicId = ongoingWork.epicId;
         ongoingStories = ongoingWork.stories;
         state = createInitialState(selectedEpicId);
+        // NOTE: state.stories.approvals will be populated in future stories (batch/dev-only workflow modes)
+        // Currently in sequential mode, approvals are not tracked
 
         success(`Found ongoing work in epic: ${selectedEpicId}`);
         if (ongoingStories.length > 0) {
@@ -132,6 +134,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       }
       selectedEpicId = selectedEpicFromPrompt.id;
       state = createInitialState(selectedEpicId);
+      // NOTE: state.stories.approvals will be populated in future stories (batch/dev-only workflow modes)
+      // Currently in sequential mode, approvals are not tracked
     }
 
     // Now load epic details (needed for story processing)
@@ -182,19 +186,19 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     step(3, 4, 'Processing stories in epic');
 
     const stories = selectedEpic.stories;
-    const startIndex = state?.currentStoryIndex || 0;
+    const startIndex = state?.workflow.currentStoryIndex || 0;
 
     for (let i = startIndex; i < stories.length; i++) {
       const epicStory = stories[i];
-      state!.currentStoryIndex = i;
-      state!.devReviewIteration = 0;
+      state!.workflow.currentStoryIndex = i;
+      state!.workflow.devReviewIteration = 0;
       await saveState(cwd, state!);
 
       header(`Story ${i + 1}/${stories.length}: ${epicStory.id}`);
       info(`Title: ${epicStory.title}`);
 
       // Check if story already completed (from johnny-bmad state or sprint-status)
-      if (state!.completedStories.includes(epicStory.id) || epicStory.status === 'done') {
+      if (state!.stories.completed.includes(epicStory.id) || epicStory.status === 'done') {
         info('Story already completed, skipping');
         continue;
       }
@@ -237,7 +241,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
       while (!storyComplete && iteration < maxIterations) {
         iteration++;
-        state!.devReviewIteration = iteration;
+        state!.workflow.devReviewIteration = iteration;
         await saveState(cwd, state!);
 
         info(`Dev-Review iteration ${iteration}/${maxIterations}`);
@@ -309,7 +313,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         switch (action) {
           case 'continue':
             // Reset and continue (will be picked up on next run)
-            state!.devReviewIteration = 0;
+            state!.workflow.devReviewIteration = 0;
             await saveState(cwd, state!);
             i--; // Retry this story
             continue;
@@ -353,7 +357,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       }
 
       // Mark story as completed
-      state!.completedStories.push(epicStory.id);
+      state!.stories.completed.push(epicStory.id);
       await saveState(cwd, state!);
 
       // Update sprint-status.yaml to mark story as done
@@ -371,7 +375,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     header('Epic Complete');
     successWithTiming(`Epic ${selectedEpic.id} finished!`);
-    success(`Completed ${state!.completedStories.length} stories (total: ${getSessionElapsed()})`);
+    success(`Completed ${state!.stories.completed.length} stories (total: ${getSessionElapsed()})`);
 
     // Clear state for this epic
     await clearState(cwd);

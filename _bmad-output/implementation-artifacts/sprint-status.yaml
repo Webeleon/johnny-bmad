@@ -1,0 +1,90 @@
+# generated: 2026-02-04
+# project: johnny-bmad
+# project_key: johnny-bmad
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-02-04
+project: johnny-bmad
+project_key: johnny-bmad
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: State Schema & Migration
+  epic-1: in-progress
+  1-1-define-enhanced-state-typescript-interface: done
+  1-2-implement-v0-2-0-state-detection-and-migration: backlog
+  1-3-implement-atomic-state-write-operations: backlog
+  1-4-implement-corrupt-state-detection-and-recovery: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: CLI Flags & Workflow Router
+  epic-2: backlog
+  2-1-add-batch-and-dev-only-flag-parsing: backlog
+  2-2-implement-flag-validation-mutually-exclusive-check: backlog
+  2-3-implement-workflow-mode-determination: backlog
+  2-4-update-help-text-with-new-flags-and-examples: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Terminal UI Component System
+  epic-3: backlog
+  3-1-create-ui-component-directory-structure-and-index: backlog
+  3-2-implement-ascii-banner-component: backlog
+  3-3-implement-phase-header-component: backlog
+  3-4-implement-progress-bar-component: backlog
+  3-5-implement-agent-activity-line-component: backlog
+  3-6-implement-status-message-component: backlog
+  3-7-implement-story-review-card-component: backlog
+  3-8-implement-error-block-and-celebration-components: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Batch Story Creation Workflow
+  epic-4: backlog
+  4-1-implement-runbatchworkflow-function-shell: backlog
+  4-2-implement-batch-story-creation-loop: backlog
+  4-3-implement-per-story-review-flow: backlog
+  4-4-implement-story-change-request-iteration: backlog
+  4-5-implement-auto-approve-mode-for-batch: backlog
+  4-6-implement-batch-completion-and-exit: backlog
+  4-7-implement-retry-logic-for-story-creator: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Dev-Only Execution Mode
+  epic-5: backlog
+  5-1-implement-rundevonlyworkflow-function-shell: backlog
+  5-2-implement-story-detection-and-pre-implementation-display: backlog
+  5-3-implement-dev-agent-execution-with-retry: backlog
+  5-4-implement-reviewer-agent-execution-with-retry: backlog
+  5-5-implement-dev-review-loop-and-commit-flow: backlog
+  5-6-implement-dev-only-completion-with-celebration: backlog
+  epic-5-retrospective: optional
