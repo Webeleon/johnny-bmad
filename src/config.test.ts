@@ -3,7 +3,7 @@ import { writeFile, unlink, rm, mkdtemp, readFile, access, mkdir } from 'fs/prom
 import * as fsPromises from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { loadState, saveState, createInitialState, getStateFilePath, clearState, migrateV0toV1, promptMigration, isValidState, isLegacyState, isHybridState, MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError } from './config.js';
+import { loadState, saveState, createInitialState, getStateFilePath, clearState, migrateV0toV1, promptMigration, isValidState, isLegacyState, isHybridState, MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError, CorruptStateError, promptCorruptRecovery, attemptPartialRecovery, RECOVERY_DEFAULT_EPIC } from './config.js';
 import type { State, LegacyState } from './types.js';
 
 let TEST_DIR: string;
@@ -320,6 +320,9 @@ describe('config.ts - State Management', () => {
     });
 
     test('should attempt partial recovery when missing stories object', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -329,11 +332,23 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when workflow.mode is invalid', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -343,12 +358,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when workflow.phase is invalid', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -357,12 +384,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.completed is not an array', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -371,12 +410,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when currentStoryIndex is not a number', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -385,12 +436,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.approvals has invalid status value', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -404,12 +467,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.approvals has mixed valid and invalid statuses', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -425,12 +500,26 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        // approvals object should be replaced with empty object (invalid approvals lost)
+        expect(loaded?.stories.approvals).toEqual({});
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when workflow is an array instead of object', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -439,12 +528,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.approvals is an array instead of object', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -456,12 +557,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when currentEpic is empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: '',
         lastUpdated: new Date().toISOString(),
@@ -470,12 +583,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when currentEpic is whitespace only', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: '   ',
         lastUpdated: new Date().toISOString(),
@@ -484,12 +609,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when lastUpdated is empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: '',
@@ -498,12 +635,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.completed contains non-string element', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -515,12 +664,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.completed contains null element', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -532,12 +693,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when currentStoryIndex is negative', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -546,12 +719,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when devReviewIteration is negative', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -560,12 +745,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.completed contains empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -577,12 +774,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when stories.completed contains whitespace-only string', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
@@ -594,12 +803,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when lastUpdated is not a valid ISO date (v1+ state)', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: 'not-a-valid-date', // Invalid date string
@@ -608,12 +829,24 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should attempt partial recovery when lastUpdated is not a valid ISO date (legacy state)', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const invalidLegacyState = {
         currentEpic: 'epic-1',
         currentStoryIndex: 0,
@@ -623,8 +856,17 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidLegacyState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Partial recovery accepted - should return recovered state with defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBeDefined();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should accept valid ISO 8601 date formats in lastUpdated', async () => {
@@ -748,6 +990,9 @@ describe('config.ts - State Management', () => {
 
     test('should return null for legacy state with non-string completedStories element', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const legacyState = {
         currentEpic: 'epic-1',
         currentStoryIndex: 0,
@@ -757,12 +1002,22 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should return null for legacy state with empty string in completedStories', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const legacyState = {
         currentEpic: 'epic-1',
         currentStoryIndex: 0,
@@ -772,12 +1027,22 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should return null for legacy state with whitespace-only string in completedStories', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const legacyState = {
         currentEpic: 'epic-1',
         currentStoryIndex: 0,
@@ -787,12 +1052,22 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
     test('should return null for hybrid state with both v0.2.0 and v1+ fields', async () => {
       const path = getStateFilePath(TEST_DIR);
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       // Hybrid state has both completedStories (v0.2.0) AND workflow/stories (v1+)
       const hybridState = {
         currentEpic: 'epic-1',
@@ -813,9 +1088,16 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(hybridState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
       // isLegacyState() should reject hybrid states (line 75 check: if 'workflow' in state || 'stories' in state)
-      expect(loaded).toBeNull();
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
   });
 
@@ -2173,9 +2455,7 @@ describe('config.ts - State Management', () => {
 
   describe('config.ts - Corrupt State Detection and Recovery (Story 1.4)', () => {
     describe('promptCorruptRecovery()', () => {
-      test('should display [WARN] corrupt state message', async () => {
-        const { promptCorruptRecovery } = await import('./config.js');
-
+      test('should display WARN corrupt state message', async () => {
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
@@ -2196,8 +2476,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should offer "1. Delete and start fresh  2. Exit and fix manually"', async () => {
-        const { promptCorruptRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
@@ -2219,8 +2497,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should delete state and return null when user selects option 1', async () => {
-        const { promptCorruptRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
@@ -2245,8 +2521,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should throw CorruptStateError when user selects option 2', async () => {
-        const { promptCorruptRecovery, CorruptStateError } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
@@ -2269,8 +2543,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should throw with recovery message in non-interactive environment', async () => {
-        const { promptCorruptRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = false;
 
@@ -2340,8 +2612,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should throw CorruptStateError when user selects "exit and fix manually"', async () => {
-        const { CorruptStateError } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
@@ -2368,9 +2638,6 @@ describe('config.ts - State Management', () => {
 
     describe('attemptPartialRecovery()', () => {
       test('should recover valid currentEpic from otherwise invalid state', async () => {
-        // RED: This should fail because attemptPartialRecovery() doesn't exist yet
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 
@@ -2398,8 +2665,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should recover valid workflow fields from partial state', async () => {
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 
@@ -2433,8 +2698,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should display recovered vs lost fields', async () => {
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 
@@ -2451,8 +2714,10 @@ describe('config.ts - State Management', () => {
         try {
           await attemptPartialRecovery(partialState, TEST_DIR);
 
-          // Verify warn() was called to display recovery info
-          expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+          // Verify warn() displays both recovered and lost fields
+          const allOutput = consoleSpy.mock.calls.map(call => call.join(' ')).join('\n');
+          expect(allOutput).toContain('Recovered fields:');
+          expect(allOutput).toContain('Lost fields:');
         } finally {
           process.stdin.isTTY = originalIsTTY;
           consoleSpy.mockRestore();
@@ -2461,8 +2726,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should attempt partial recovery when no fields recoverable', async () => {
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 
@@ -2487,8 +2750,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should fill missing fields with defaults when user accepts', async () => {
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 
@@ -2517,8 +2778,6 @@ describe('config.ts - State Management', () => {
       });
 
       test('should fall through to corrupt prompt when user rejects', async () => {
-        const { attemptPartialRecovery } = await import('./config.js');
-
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true;
 

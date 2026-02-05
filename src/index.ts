@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { runOrchestrator } from './orchestrator.js';
-import { MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError } from './config.js';
+import { MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 import type { CliArgs } from './types.js';
 
 // Global handler for unhandled promise rejections
@@ -175,8 +175,8 @@ async function main(): Promise<void> {
      * This separation ensures migration UX remains clean while other errors
      * get actionable recovery guidance following Rule 5 (Try: pattern).
      */
-    if (err instanceof MigrationDeclinedError || err instanceof NonInteractiveError) {
-      // Error messages already displayed by promptMigration()
+    if (err instanceof MigrationDeclinedError || err instanceof NonInteractiveError || err instanceof CorruptStateError) {
+      // Error messages already displayed by promptMigration() or promptCorruptRecovery()
       process.exit(1);
       return; // Defensive: prevent fall-through if process.exit is mocked or behavior changes
     }

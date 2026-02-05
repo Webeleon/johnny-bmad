@@ -90,6 +90,14 @@ export const DEFAULT_WORKFLOW_MODE: WorkflowMode = 'sequential';
  */
 export const DEFAULT_WORKFLOW_PHASE: WorkflowPhase = 'implementation';
 
+/**
+ * Default epic ID used when partial recovery can't extract a valid currentEpic value
+ * Used in attemptPartialRecovery() when currentEpic is missing, empty, or whitespace-only
+ *
+ * @see Story 1.4 - Corrupt State Detection and Recovery
+ */
+export const RECOVERY_DEFAULT_EPIC = 'epic-unknown';
+
 export function getStateFilePath(cwd: string): string {
   return join(cwd, STATE_FILE);
 }
@@ -440,6 +448,8 @@ export async function attemptPartialRecovery(
     }
 
     if (Object.keys(partialWorkflow).length > 0) {
+      // `as any` needed: partialWorkflow is Record<string, unknown> but workflow expects State['workflow']
+      // TypeScript can't verify partial objects match full interface at compile time
       recovered.workflow = partialWorkflow as any;
       workflowRecovered = true;
     }
@@ -467,6 +477,8 @@ export async function attemptPartialRecovery(
     }
 
     if (Object.keys(partialStories).length > 0) {
+      // `as any` needed: partialStories is Record<string, unknown> but stories expects State['stories']
+      // TypeScript can't verify partial objects match full interface at compile time
       recovered.stories = partialStories as any;
       storiesRecovered = true;
     }
@@ -523,23 +535,27 @@ export async function attemptPartialRecovery(
 
   // Build complete state with recovered + defaults
   const completeState: State = {
-    currentEpic: recovered.currentEpic || 'epic-unknown',
-    lastUpdated: recovered.lastUpdated || new Date().toISOString(),
+    currentEpic: recovered.currentEpic ?? RECOVERY_DEFAULT_EPIC,
+    lastUpdated: recovered.lastUpdated ?? new Date().toISOString(),
     workflow: {
-      mode: (recovered.workflow as any)?.mode || DEFAULT_WORKFLOW_MODE,
-      phase: (recovered.workflow as any)?.phase || DEFAULT_WORKFLOW_PHASE,
+      // `as any` needed: recovered.workflow/stories are Record<string, unknown> | undefined
+      // Safe because we validated fields during recovery extraction above
+      mode: (recovered.workflow as any)?.mode ?? DEFAULT_WORKFLOW_MODE,
+      phase: (recovered.workflow as any)?.phase ?? DEFAULT_WORKFLOW_PHASE,
       currentStoryIndex: (recovered.workflow as any)?.currentStoryIndex ?? 0,
       devReviewIteration: (recovered.workflow as any)?.devReviewIteration ?? 0
     },
     stories: {
-      completed: (recovered.stories as any)?.completed || [],
-      approvals: (recovered.stories as any)?.approvals || {}
+      // `as any` needed: same reason as workflow - validated during extraction
+      completed: (recovered.stories as any)?.completed ?? [],
+      approvals: (recovered.stories as any)?.approvals ?? {}
     }
   };
 
-  // Save recovered state using atomic write
+  // Save recovered state using atomic write and get disk timestamp
+  let writtenTimestamp: string;
   try {
-    await saveState(cwd, completeState);
+    writtenTimestamp = await saveState(cwd, completeState);
     debug('Saved recovered state with defaults');
   } catch (saveError) {
     throw new MigrationSaveError(
@@ -549,10 +565,18 @@ export async function attemptPartialRecovery(
     );
   }
 
-  // Return the saved state (with disk timestamp)
-  const statePath = getStateFilePath(cwd);
-  const content = await readFile(statePath, 'utf-8');
-  return JSON.parse(content) as State;
+  // Return the saved state with disk timestamp (avoid re-reading from disk)
+  const stateWithDiskTimestamp: State = {
+    ...completeState,
+    lastUpdated: writtenTimestamp
+  };
+
+  // Defensive validation: ensure returned state is valid after timestamp spread
+  if (!isValidState(stateWithDiskTimestamp)) {
+    throw new Error('Internal error: recovered state with disk timestamp failed validation');
+  }
+
+  return stateWithDiskTimestamp;
 }
 
 /**

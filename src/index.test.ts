@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { formatErrorWithRecovery } from './index.js';
-import { StatePermissionError, MigrationSaveError } from './config.js';
+import { StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 
 describe('index.ts - Error Handling', () => {
   describe('formatErrorWithRecovery()', () => {
@@ -91,6 +91,18 @@ describe('index.ts - Error Handling', () => {
       // Should NOT have disk-full or permission messages
       expect(result.message).not.toContain('disk is full');
       expect(result.message).not.toContain('permission denied');
+    });
+
+    test('should format CorruptStateError (though main() should catch it before formatErrorWithRecovery)', () => {
+      // NOTE: In practice, main() catches CorruptStateError before calling formatErrorWithRecovery()
+      // This test documents what WOULD happen if formatErrorWithRecovery() received it incorrectly
+      const error = new CorruptStateError('Corrupt state file - user chose to fix manually');
+
+      const result = formatErrorWithRecovery(error);
+
+      // Should get generic error formatting (since CorruptStateError doesn't have recovery property)
+      expect(result.message).toBe('[ERROR] Fatal error: Corrupt state file - user chose to fix manually');
+      expect(result.recovery).toBe('        Try: Run johnny-bmad again to resume from saved state');
     });
   });
 });
