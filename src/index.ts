@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runOrchestrator } from './orchestrator.js';
+import { MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError } from './config.js';
 import type { CliArgs } from './types.js';
 
 // Global handler for unhandled promise rejections
@@ -114,8 +115,21 @@ async function main(): Promise<void> {
   try {
     await runOrchestrator(args);
   } catch (err) {
-    console.error('Fatal error:', err);
-    process.exit(1);
+    // Handle migration-specific errors with appropriate exit codes
+    if (err instanceof MigrationDeclinedError || err instanceof NonInteractiveError) {
+      // Error messages already displayed by promptMigration()
+      process.exit(1);
+    } else if (err instanceof StatePermissionError || err instanceof MigrationSaveError) {
+      // Handle errors with recovery guidance (NFR-R6, Rule 5)
+      console.error(`[ERROR] ${err.message}`);
+      console.error(`        ${err.recovery}`);
+      process.exit(1);
+    } else {
+      // Generic fatal error handling
+      console.error('[ERROR] Fatal error:', err instanceof Error ? err.message : String(err));
+      console.error('        Try: Run johnny-bmad again to resume from saved state');
+      process.exit(1);
+    }
   }
 }
 

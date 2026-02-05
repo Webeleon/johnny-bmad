@@ -191,7 +191,7 @@ export interface State {
  *   currentStoryIndex: 2,
  *   devReviewIteration: 1,
  *   completedStories: ['story-1', 'story-2'],
- *   lastUpdated: '2024-01-15T10:30:00.000Z'
+ *   lastUpdated: '2026-02-04T10:30:00.000Z'
  * };
  * ```
  */

@@ -1,33 +1,157 @@
 import { readFile, writeFile, rename, unlink } from 'fs/promises';
 import { join } from 'path';
-import type { State, LegacyState } from './types.js';
-import { debug } from './utils/logger.js';
+import inquirer from 'inquirer';
+import type { State, LegacyState, WorkflowMode, WorkflowPhase } from './types.js';
+import { debug, warn } from './utils/logger.js';
 
 const STATE_FILE = '.johnny-bmad-state.json';
+
+/**
+ * Error thrown when user declines state migration
+ */
+export class MigrationDeclinedError extends Error {
+  constructor(message: string = 'User declined state migration') {
+    super(message);
+    this.name = 'MigrationDeclinedError';
+  }
+}
+
+/**
+ * Error thrown when user prompts fail in non-interactive environment
+ * Used for migration prompts (Story 1.2) and future interactive flows
+ */
+export class NonInteractiveError extends Error {
+  constructor(message: string = 'Cannot prompt in non-interactive environment') {
+    super(message);
+    this.name = 'NonInteractiveError';
+  }
+}
+
+/**
+ * Error thrown when state file cannot be read due to permission issues
+ * Halts execution to prevent silent data loss (NFR-R6)
+ *
+ * Note: Named StatePermissionError to avoid potential collision with
+ * TC39 Stage 3 PermissionError proposal (future Node.js global)
+ */
+export class StatePermissionError extends Error {
+  constructor(message: string, public readonly recovery: string) {
+    super(message);
+    this.name = 'StatePermissionError';
+  }
+}
+
+/**
+ * Error thrown when migration completes but saving the migrated state fails
+ * Provides recovery context to prevent user confusion (NFR-R6, Rule 5)
+ */
+export class MigrationSaveError extends Error {
+  public readonly recovery: string;
+
+  constructor(message: string, recovery: string, cause?: Error) {
+    super(message, cause ? { cause } : undefined);
+    this.name = 'MigrationSaveError';
+    this.recovery = recovery;
+  }
+}
+
+/**
+ * Default workflow mode for new state objects and migrated legacy states
+ * Ensures backward compatibility by defaulting to sequential mode
+ *
+ * Exported to prevent magic string duplication across the codebase
+ * (e.g., orchestrator.ts for mode determination, test fixtures)
+ *
+ * @see _bmad-output/planning-artifacts/architecture/core-architectural-decisions.md
+ *      Migration Strategy section - documents why 'sequential' is the default mode
+ */
+export const DEFAULT_WORKFLOW_MODE: WorkflowMode = 'sequential';
+
+/**
+ * Default workflow phase for new state objects and migrated legacy states
+ * Defaults to implementation phase for typical development workflows
+ *
+ * Exported to prevent magic string duplication across the codebase
+ * (e.g., orchestrator.ts for phase determination, test fixtures)
+ *
+ * @see _bmad-output/planning-artifacts/architecture/core-architectural-decisions.md
+ *      Migration Strategy section - documents why 'implementation' is the default phase
+ */
+export const DEFAULT_WORKFLOW_PHASE: WorkflowPhase = 'implementation';
 
 export function getStateFilePath(cwd: string): string {
   return join(cwd, STATE_FILE);
 }
 
 /**
- * Validates if an object is a valid v1+ State
+ * Detects hybrid states with both v0.2.0 and v1+ fields (invalid/ambiguous)
+ * Pass top-level state objects only - sub-objects may false-positive.
+ *
+ * @internal Exported for unit testing only; use isValidState()/isLegacyState() in app code.
  */
-function isValidState(obj: unknown): obj is State {
+export function isHybridState(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false;
+  // Explicitly reject arrays - function checks for plain objects only
+  if (Array.isArray(obj)) return false;
+
+  const state = obj as Record<string, unknown>;
+
+  const hasV0Fields = 'completedStories' in state || 'currentStoryIndex' in state || 'devReviewIteration' in state;
+  const hasV1Fields = 'workflow' in state || 'stories' in state;
+
+  // Hybrid state: has BOTH v0.2.0 AND v1+ fields
+  return hasV0Fields && hasV1Fields;
+}
+
+/**
+ * Validates common top-level fields shared by both v1+ and v0.2.0 states
+ * Reduces duplication between isValidState() and isLegacyState()
+ *
+ * @internal
+ * @param obj - Object to validate (expected to be Record<string, unknown>)
+ * @returns true if currentEpic and lastUpdated fields are valid
+ */
+function hasValidTopLevelFields(obj: Record<string, unknown>): boolean {
+  // Check required top-level fields (non-empty strings)
+  if (typeof obj.currentEpic !== 'string' || obj.currentEpic.trim() === '') return false;
+  if (typeof obj.lastUpdated !== 'string' || obj.lastUpdated.trim() === '') return false;
+
+  // Validate currentEpic against path traversal (defense-in-depth)
+  // currentEpic is used in file path construction (e.g., finding epic-*.md files)
+  // Only allow alphanumeric, hyphens, and underscores (typical epic ID pattern: "epic-1", "epic-42")
+  const epicPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!epicPattern.test(obj.currentEpic)) return false;
+
+  // Validate lastUpdated is a parseable date string
+  // Prevents propagating/migrating invalid timestamps
+  // Note: Date.parse() accepts many formats, not just ISO 8601
+  if (isNaN(Date.parse(obj.lastUpdated))) return false;
+
+  return true;
+}
+
+/**
+ * Validates if an object is a valid v1+ State
+ * Exported for testing and debugging utilities
+ */
+export function isValidState(obj: unknown): obj is State {
   if (!obj || typeof obj !== 'object') return false;
 
   const state = obj as Record<string, unknown>;
 
-  // Check required top-level fields (non-empty strings)
-  if (typeof state.currentEpic !== 'string' || state.currentEpic.trim() === '') return false;
-  if (typeof state.lastUpdated !== 'string' || state.lastUpdated.trim() === '') return false;
+  // Validate common top-level fields using shared helper
+  if (!hasValidTopLevelFields(state)) return false;
 
-  // Check workflow object
-  if (!state.workflow || typeof state.workflow !== 'object') return false;
+  // Reject hybrid states using shared helper
+  if (isHybridState(obj)) return false;
+
+  // Check workflow object (reject arrays)
+  if (!state.workflow || typeof state.workflow !== 'object' || Array.isArray(state.workflow)) return false;
   const workflow = state.workflow as Record<string, unknown>;
   if (!['sequential', 'batch', 'dev-only'].includes(workflow.mode as string)) return false;
   if (!['story-creation', 'review', 'implementation'].includes(workflow.phase as string)) return false;
-  if (typeof workflow.currentStoryIndex !== 'number' || workflow.currentStoryIndex < 0) return false;
-  if (typeof workflow.devReviewIteration !== 'number' || workflow.devReviewIteration < 0) return false;
+  if (!Number.isInteger(workflow.currentStoryIndex) || (workflow.currentStoryIndex as number) < 0) return false;
+  if (!Number.isInteger(workflow.devReviewIteration) || (workflow.devReviewIteration as number) < 0) return false;
 
   // Check stories object
   if (!state.stories || typeof state.stories !== 'object') return false;
@@ -37,7 +161,8 @@ function isValidState(obj: unknown): obj is State {
   // Validate all completed array elements are non-empty strings
   if (!stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) return false;
 
-  if (!stories.approvals || typeof stories.approvals !== 'object') return false;
+  // Check stories.approvals is a plain object (reject arrays)
+  if (!stories.approvals || typeof stories.approvals !== 'object' || Array.isArray(stories.approvals)) return false;
 
   // Validate stories.approvals values are valid StoryApprovalStatus
   const approvals = stories.approvals as Record<string, unknown>;
@@ -51,34 +176,184 @@ function isValidState(obj: unknown): obj is State {
 
 /**
  * Validates if an object is a legacy v0.2.0 state (requires migration)
+ * Exported for testing and debugging utilities
  */
-function isLegacyState(obj: unknown): obj is LegacyState {
+export function isLegacyState(obj: unknown): obj is LegacyState {
   if (!obj || typeof obj !== 'object') return false;
 
   const state = obj as Record<string, unknown>;
 
-  // Legacy state has flat structure with these exact fields (matching isValidState order)
-  // Check required top-level string fields (non-empty)
-  if (typeof state.currentEpic !== 'string' || state.currentEpic.trim() === '') return false;
-  if (typeof state.lastUpdated !== 'string' || state.lastUpdated.trim() === '') return false;
+  // Validate common top-level fields using shared helper
+  if (!hasValidTopLevelFields(state)) return false;
 
-  // Check numeric fields (non-negative)
-  if (typeof state.currentStoryIndex !== 'number' || state.currentStoryIndex < 0) return false;
-  if (typeof state.devReviewIteration !== 'number' || state.devReviewIteration < 0) return false;
+  // Check numeric fields (non-negative integers)
+  if (!Number.isInteger(state.currentStoryIndex) || (state.currentStoryIndex as number) < 0) return false;
+  if (!Number.isInteger(state.devReviewIteration) || (state.devReviewIteration as number) < 0) return false;
 
   // Check array field - validate all elements are non-empty strings (matching isValidState consistency)
   if (!Array.isArray(state.completedStories)) return false;
   if (!state.completedStories.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) return false;
 
-  // Ensure it's NOT v1 structure (no nested workflow/stories objects)
-  if ('workflow' in state || 'stories' in state) return false;
+  // Ensure it's NOT v1 structure (no nested workflow/stories objects) using shared helper
+  if (isHybridState(obj)) return false;
 
   return true;
 }
 
-export async function loadState(cwd: string): Promise<State | null> {
+/**
+ * Migrates a legacy v0.2.0 state to v1+ format
+ *
+ * @param legacyState - The legacy state object to migrate
+ * @returns A new State object with v1+ structure
+ *
+ * @example
+ * ```typescript
+ * const legacy: LegacyState = {
+ *   currentEpic: 'epic-1',
+ *   currentStoryIndex: 2,
+ *   devReviewIteration: 1,
+ *   completedStories: ['story-1', 'story-2'],
+ *   lastUpdated: '2026-01-15T10:30:00.000Z' // ISO-8601 timestamp
+ * };
+ * const migrated = migrateV0toV1(legacy);
+ * // migrated.workflow.mode === 'sequential'
+ * // migrated.workflow.currentStoryIndex === 2
+ * ```
+ *
+ * @remarks
+ * **Defensive Copy Design Decision:**
+ * - Arrays (completedStories) are defensively copied using spread operator
+ * - Objects (workflow, stories, approvals) are created fresh inline
+ * - If future code adds nested objects/arrays, consider implementing deep clone pattern
+ * - Current implementation sufficient as all nested structures are primitives or empty objects
+ */
+export function migrateV0toV1(legacyState: LegacyState): State {
+  return {
+    // Preserve top-level fields
+    currentEpic: legacyState.currentEpic,
+    lastUpdated: legacyState.lastUpdated,
+
+    // Map to workflow object
+    workflow: {
+      mode: DEFAULT_WORKFLOW_MODE, // Default to sequential mode for backward compatibility
+      phase: DEFAULT_WORKFLOW_PHASE, // Default to implementation phase
+      currentStoryIndex: legacyState.currentStoryIndex,
+      devReviewIteration: legacyState.devReviewIteration
+    },
+
+    // Map to stories object
+    stories: {
+      completed: [...legacyState.completedStories], // Defensive copy to prevent unintended mutations
+      approvals: {} // Default to empty approvals
+    }
+  };
+}
+
+/**
+ * Prompts user to migrate legacy v0.2.0 state to v1+ format
+ *
+ * @param legacyState - The legacy state to migrate
+ * @param cwd - Current working directory
+ * @returns Migrated State if user confirms
+ * @throws {MigrationDeclinedError} When user declines migration
+ * @throws {NonInteractiveError} When prompt fails in non-interactive environment
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   const migrated = await promptMigration(legacy, cwd);
+ *   // User confirmed: returns migrated State
+ * } catch (error) {
+ *   if (error instanceof MigrationDeclinedError) {
+ *     // User declined migration
+ *     console.log('Try: Delete .johnny-bmad-state.json to start fresh');
+ *     process.exit(1);
+ *   }
+ * }
+ * ```
+ */
+export async function promptMigration(
+  legacyState: LegacyState,
+  cwd: string
+): Promise<State> {
+  // Proactive TTY check - safer than fragile string matching on error messages
+  // Inquirer error messages have no API contract, so we check stdin.isTTY first
+  if (!process.stdin.isTTY) {
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn('Cannot prompt for migration in non-interactive environment');
+    warn('Try: Run in interactive terminal or delete .johnny-bmad-state.json to start fresh');
+    throw new NonInteractiveError();
+  }
+
+  // Narrow try/catch to only wrap inquirer.prompt() call
+  // Prevents self-catch pattern where MigrationDeclinedError is caught and re-thrown
+  let confirmed: boolean;
   try {
-    const statePath = getStateFilePath(cwd);
+    const response = await inquirer.prompt<{ confirmed: boolean }>([
+      {
+        type: 'confirm',
+        name: 'confirmed',
+        message: 'Migrate state file to v1 format?',
+        default: true
+      }
+    ]);
+    confirmed = response.confirmed;
+  } catch (error) {
+    // Unexpected error during prompt (not non-interactive since we checked TTY above)
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn(`Unexpected error during migration prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn('Try: Delete .johnny-bmad-state.json to start fresh');
+    throw error; // Propagate unexpected errors
+  }
+
+  // Handle user response outside try/catch (no self-catch pattern)
+  if (confirmed) {
+    // User confirmed migration
+    const migrated = migrateV0toV1(legacyState);
+
+    // Attempt to save migrated state with error context
+    // Per NFR-R6 and Rule 5: surface save failures with recovery guidance
+    let writtenTimestamp: string;
+    try {
+      writtenTimestamp = await saveState(cwd, migrated);
+      debug(`Migrated legacy state at ${getStateFilePath(cwd)} to v1 format`);
+    } catch (saveError) {
+      // Migration computed successfully, but save failed
+      // Wrap in MigrationSaveError to provide clear recovery context in CLI
+      throw new MigrationSaveError(
+        'Migration completed but failed to save new state file',
+        'Try: Fix disk/permissions and restart to retry migration. Your original legacy state file should be intact.',
+        saveError instanceof Error ? saveError : undefined
+      );
+    }
+
+    // Return in-memory copy with exact timestamp that was written to disk
+    // This ensures in-memory state matches disk state (no timestamp drift)
+    const stateWithDiskTimestamp: State = {
+      ...migrated,
+      lastUpdated: writtenTimestamp
+    };
+
+    // Defensive validation: ensure returned state is valid after timestamp spread
+    // Guards against future bugs where saveState timestamp logic changes
+    // NOTE: This validation is OUTSIDE try/catch to avoid misclassifying validation failures as save errors
+    if (!isValidState(stateWithDiskTimestamp)) {
+      throw new Error('Internal error: migrated state with disk timestamp failed validation');
+    }
+
+    return stateWithDiskTimestamp;
+  } else {
+    // User declined migration - throw error to let caller handle exit
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn('Migration declined.');
+    warn('Try: Delete .johnny-bmad-state.json to start fresh');
+    throw new MigrationDeclinedError('User declined state migration');
+  }
+}
+
+export async function loadState(cwd: string): Promise<State | null> {
+  const statePath = getStateFilePath(cwd);
+  try {
     const content = await readFile(statePath, 'utf-8');
 
     // Parse JSON and validate structure
@@ -96,32 +371,106 @@ export async function loadState(cwd: string): Promise<State | null> {
       return parsed;
     }
 
-    // Check if it's a legacy v0.2.0 state (needs migration in Story 1.2)
+    // Check if it's a legacy v0.2.0 state (needs migration)
     if (isLegacyState(parsed)) {
-      debug(`Detected legacy v0.2.0 state at ${statePath} - migration needed`);
-      // For now, return null (migration will be implemented in Story 1.2)
-      return null;
+      debug(`Detected legacy v0.2.0 state at ${statePath} - prompting user for migration`);
+      // Migration errors propagate to outer catch, which re-throws MigrationDeclinedError/NonInteractiveError
+      return await promptMigration(parsed, cwd);
     }
 
     // State file exists but has invalid/unknown structure
+    // Warn user so they know their state was rejected (NFR-R6: avoid silent data loss)
+    warn('State file found but has unrecognized structure. Starting fresh.');
+    warn('Try: Back up .johnny-bmad-state.json before it gets overwritten');
     debug(`State file has invalid structure at ${statePath}`);
     return null;
-  } catch {
-    debug('No existing state file found');
-    return null;
+  } catch (error: unknown) {
+    // Re-throw migration, permission, and unknown errors to caller (CLI handles exit)
+    // Prevents silent null return that could cause orchestrator to overwrite user's legacy progress
+    if (
+      error instanceof MigrationDeclinedError ||
+      error instanceof MigrationSaveError ||
+      error instanceof NonInteractiveError ||
+      error instanceof StatePermissionError
+    ) {
+      throw error;
+    }
+
+    // Distinguish between expected (file not found) and filesystem errors
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
+      debug('No existing state file found');
+      return null;
+    } else if (err.code === 'EACCES') {
+      // NFR-R6 (zero data loss): Throw error to halt execution and prevent silent data loss
+      // Per project-context.md Rule 5: Error messages must include recovery
+      throw new StatePermissionError(
+        `Permission denied reading state file at ${statePath}`,
+        'Try: chmod 644 .johnny-bmad-state.json'
+      );
+    } else {
+      // Re-throw unexpected errors (e.g., inquirer errors, JSON.parse failures, unknown fs errors)
+      // Prevents silent data loss by halting execution instead of returning null
+      // Note: Only log error message, not full path, to avoid leaking local machine structure
+      debug(`Unexpected error reading state: ${err.message || 'unknown error'}`);
+      throw error;
+    }
   }
 }
 
-export async function saveState(cwd: string, state: State): Promise<void> {
+/**
+ * Saves state to disk with atomic write pattern
+ *
+ * @param cwd - Current working directory
+ * @param state - State object to save
+ * @returns Promise resolving with ISO timestamp string written to disk
+ *
+ * @remarks
+ * The returned timestamp is the exact value written to state.lastUpdated on disk.
+ * This is critical for promptMigration() which needs the disk timestamp to avoid drift.
+ */
+export async function saveState(cwd: string, state: State): Promise<string> {
   const statePath = getStateFilePath(cwd);
   const tmpPath = `${statePath}.tmp`;
-  state.lastUpdated = new Date().toISOString();
+
+  // Shallow copy with updated timestamp to avoid mutating input's lastUpdated field
+  // Note: Nested objects (workflow, stories) remain references, but this is safe because
+  // JSON.stringify is synchronous - no mutation risk between copy and serialization
+  //
+  // Defensive Copy Strategy Alignment:
+  // - saveState() uses shallow copy (performance) - safe due to synchronous serialization
+  // - migrateV0toV1() uses deep copy (safety) - prevents legacy state mutations
+  // Different contexts, appropriate strategies for each use case
+  const timestamp = new Date().toISOString();
+  const toSave: State = {
+    ...state,
+    lastUpdated: timestamp
+  };
 
   // Atomic write: write to .tmp file, then rename (Rule 8 from project-context.md)
-  await writeFile(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
-  await rename(tmpPath, statePath);
-
-  debug(`Saved state to ${statePath}`);
+  try {
+    await writeFile(tmpPath, JSON.stringify(toSave, null, 2), 'utf-8');
+    await rename(tmpPath, statePath);
+    debug(`Saved state to ${statePath}`);
+    return timestamp; // Return the exact timestamp written to disk
+  } catch (error) {
+    // Clean up orphaned .tmp file if rename fails (e.g., cross-device, disk full)
+    // Per NFR-R6 and Rule 8: prevent temp file accumulation
+    try {
+      await unlink(tmpPath);
+      debug(`Cleaned up orphaned temp file: ${tmpPath}`);
+    } catch (unlinkError) {
+      // Best effort cleanup - distinguish ENOENT (no temp file exists) from genuine failures
+      const isENOENT = unlinkError instanceof Error && 'code' in unlinkError && unlinkError.code === 'ENOENT';
+      if (isENOENT) {
+        debug(`No temp file to cleanup (writeFile likely failed before creating ${tmpPath})`);
+      } else {
+        debug(`Failed to cleanup temp file ${tmpPath}: ${unlinkError}`);
+      }
+    }
+    // Re-throw original error to caller
+    throw error;
+  }
 }
 
 export function createInitialState(epicId: string): State {
@@ -129,8 +478,8 @@ export function createInitialState(epicId: string): State {
     currentEpic: epicId,
     lastUpdated: new Date().toISOString(),
     workflow: {
-      mode: 'sequential',
-      phase: 'implementation',
+      mode: DEFAULT_WORKFLOW_MODE,
+      phase: DEFAULT_WORKFLOW_PHASE,
       currentStoryIndex: 0,
       devReviewIteration: 0
     },
@@ -142,10 +491,26 @@ export function createInitialState(epicId: string): State {
 }
 
 export async function clearState(cwd: string): Promise<void> {
+  const statePath = getStateFilePath(cwd);
   try {
-    await unlink(getStateFilePath(cwd));
+    await unlink(statePath);
     debug('Cleared state file');
-  } catch {
-    // Ignore if file doesn't exist
+  } catch (error) {
+    // Only ignore ENOENT (file doesn't exist), surface other errors
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      debug('State file does not exist, nothing to clear');
+      return;
+    }
+
+    // Surface permission errors and other failures
+    if ((error as NodeJS.ErrnoException).code === 'EACCES') {
+      throw new StatePermissionError(
+        `Cannot delete state file at ${statePath} - permission denied`,
+        'Try: chmod 644 .johnny-bmad-state.json or check file ownership'
+      );
+    }
+
+    // Re-throw any other unexpected errors
+    throw error;
   }
 }
