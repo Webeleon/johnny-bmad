@@ -88,14 +88,6 @@ describe('config.ts - State Management', () => {
       expect(saved.lastUpdated).not.toBe(originalTimestamp);
     });
 
-    test('should not leave .tmp file after successful save', async () => {
-      const state = createInitialState('epic-1');
-      await saveState(TEST_DIR, state);
-
-      const tmpPath = `${getStateFilePath(TEST_DIR)}.tmp`;
-      await expect(access(tmpPath)).rejects.toThrow();
-    });
-
     test('should clean up .tmp file if rename fails (integration test)', async () => {
       // Integration test strategy: Create a subdirectory as the state file path
       // This makes rename() fail because you can't rename over a directory
@@ -1696,6 +1688,423 @@ describe('config.ts - State Management', () => {
         }
       };
       expect(isHybridState(partialHybrid)).toBe(true);
+    });
+  });
+
+  // ==============================================================================
+  // Story 1.3: Atomic State Write Operations - Comprehensive Test Coverage
+  // ==============================================================================
+
+  describe('Atomic State Writes', () => {
+    describe('saveState() atomicity guarantees', () => {
+      test('should write to .tmp file first then rename atomically', async () => {
+        const state = createInitialState('epic-1');
+        const statePath = getStateFilePath(TEST_DIR);
+        const tmpPath = `${statePath}.tmp`;
+
+        // Track call order with a sequence counter
+        let callSequence = 0;
+        let writeCallOrder = -1;
+        let renameCallOrder = -1;
+
+        // Capture original implementations before spying
+        const { writeFile: originalWriteFile, rename: originalRename } = fsPromises;
+
+        // Spy with sequence tracking and passthrough to originals
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockImplementation(async (...args) => {
+          writeCallOrder = callSequence++;
+          return originalWriteFile.apply(fsPromises, args);
+        });
+
+        const renameSpy = spyOn(fsPromises, 'rename').mockImplementation(async (...args) => {
+          renameCallOrder = callSequence++;
+          return originalRename.apply(fsPromises, args);
+        });
+
+        try {
+          // Run saveState with instrumented spies
+          await saveState(TEST_DIR, state);
+
+          // Verify write sequence: writeFile to .tmp, then rename to final
+          expect(writeFileSpy).toHaveBeenCalledWith(
+            tmpPath,
+            expect.any(String),
+            'utf-8'
+          );
+          expect(renameSpy).toHaveBeenCalledWith(tmpPath, statePath);
+
+          // Verify rename called AFTER writeFile (atomic sequence)
+          expect(renameCallOrder).toBeGreaterThan(writeCallOrder);
+          expect(writeCallOrder).toBe(0); // writeFile first
+          expect(renameCallOrder).toBe(1); // rename second
+        } finally {
+          // Always restore spies even if assertions fail (prevents spy leaks to subsequent tests)
+          writeFileSpy.mockRestore();
+          renameSpy.mockRestore();
+        }
+      });
+
+      test('should not leave .tmp file after successful write', async () => {
+        const state = createInitialState('epic-1');
+        await saveState(TEST_DIR, state);
+
+        const tmpPath = `${getStateFilePath(TEST_DIR)}.tmp`;
+        await expect(access(tmpPath)).rejects.toThrow('ENOENT');
+      });
+
+      test('should preserve original state file when writeFile fails', async () => {
+        // Create original state file
+        const originalState = createInitialState('epic-original');
+        await saveState(TEST_DIR, originalState);
+
+        // Read original content
+        const statePath = getStateFilePath(TEST_DIR);
+        const originalContent = await readFile(statePath, 'utf-8');
+
+        // Mock writeFile to fail (simulate ENOSPC - disk full)
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockRejectedValue(
+          Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' })
+        );
+
+        try {
+          const newState = createInitialState('epic-new');
+          await expect(saveState(TEST_DIR, newState)).rejects.toThrow('ENOSPC');
+
+          // Verify original state file unchanged
+          const afterFailContent = await readFile(statePath, 'utf-8');
+          expect(afterFailContent).toBe(originalContent);
+        } finally {
+          // Guarantee spy cleanup even if assertions fail
+          writeFileSpy.mockRestore();
+        }
+      });
+
+      test('should handle ENOENT when cleanup fails because .tmp was never created', async () => {
+        // Verify the debug path where writeFile fails before creating .tmp
+        // and unlink gets ENOENT (lines 464-466 in config.ts)
+        const state = createInitialState('epic-1');
+        const statePath = getStateFilePath(TEST_DIR);
+        const tmpPath = `${statePath}.tmp`;
+
+        // Import debug to spy on it
+        const logger = await import('./utils/logger.js');
+        const debugSpy = spyOn(logger, 'debug');
+
+        // Mock writeFile to fail before creating .tmp file
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockRejectedValue(
+          Object.assign(new Error('EIO: input/output error'), { code: 'EIO' })
+        );
+
+        // Mock unlink to simulate ENOENT (file doesn't exist)
+        const enoentError = Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+        const unlinkSpy = spyOn(fsPromises, 'unlink').mockRejectedValue(enoentError);
+
+        try {
+          await expect(saveState(TEST_DIR, state)).rejects.toThrow('EIO');
+
+          // Verify unlink was called (cleanup attempt)
+          expect(unlinkSpy).toHaveBeenCalledWith(tmpPath);
+
+          // Verify the ENOENT debug branch was hit (lines 465-466)
+          expect(debugSpy).toHaveBeenCalledWith(
+            expect.stringContaining('No temp file to cleanup')
+          );
+          expect(debugSpy).toHaveBeenCalledWith(
+            expect.stringContaining(`writeFile likely failed before creating ${tmpPath}`)
+          );
+        } finally {
+          // Guarantee spy cleanup even if assertions fail
+          writeFileSpy.mockRestore();
+          unlinkSpy.mockRestore();
+          debugSpy.mockRestore();
+        }
+      });
+
+      test('should preserve original state file when rename fails', async () => {
+        // Create original state file
+        const originalState = createInitialState('epic-original');
+        await saveState(TEST_DIR, originalState);
+
+        // Read original content
+        const statePath = getStateFilePath(TEST_DIR);
+        const originalContent = await readFile(statePath, 'utf-8');
+
+        // Mock rename to fail (simulate cross-device link)
+        const renameSpy = spyOn(fsPromises, 'rename').mockRejectedValue(
+          Object.assign(new Error('EXDEV: cross-device link not permitted'), { code: 'EXDEV' })
+        );
+
+        try {
+          const newState = createInitialState('epic-new');
+          await expect(saveState(TEST_DIR, newState)).rejects.toThrow('EXDEV');
+
+          // Verify original state file unchanged
+          const afterFailContent = await readFile(statePath, 'utf-8');
+          expect(afterFailContent).toBe(originalContent);
+        } finally {
+          // Guarantee spy cleanup even if assertions fail
+          renameSpy.mockRestore();
+        }
+      });
+
+      test('should cleanup .tmp file when rename fails', async () => {
+        const state = createInitialState('epic-1');
+        const tmpPath = `${getStateFilePath(TEST_DIR)}.tmp`;
+
+        // Mock rename to fail
+        const renameSpy = spyOn(fsPromises, 'rename').mockRejectedValue(
+          Object.assign(new Error('EXDEV: cross-device link not permitted'), { code: 'EXDEV' })
+        );
+
+        try {
+          await expect(saveState(TEST_DIR, state)).rejects.toThrow('EXDEV');
+
+          // Verify .tmp file was cleaned up
+          await expect(access(tmpPath)).rejects.toThrow('ENOENT');
+        } finally {
+          // Guarantee spy cleanup even if assertions fail
+          renameSpy.mockRestore();
+        }
+      });
+
+      test('should complete in <100ms for typical state (NFR-P2)', async () => {
+        // NOTE: This test validates the <100ms performance target from NFR-P2.
+        // In CI or slow environments, this may occasionally fail due to I/O contention.
+        // If flakiness occurs, consider widening to <500ms while documenting <100ms target,
+        // or skip in CI with environment-based conditional.
+
+        // Create typical state (moderate complexity)
+        const state = createInitialState('epic-5');
+        state.workflow.currentStoryIndex = 10;
+        state.workflow.devReviewIteration = 3;
+        state.stories.completed = Array.from({ length: 15 }, (_, i) => `story-${i + 1}`);
+        state.stories.approvals = {
+          'story-1': 'approved',
+          'story-2': 'approved',
+          'story-3': 'needs-changes',
+          'story-4': 'approved',
+          'story-5': 'pending'
+        };
+
+        // Warm-up write to reduce cold-start variance (especially in CI)
+        // This also means we measure rename-over-existing-file performance,
+        // which is the common case during johnny-bmad execution (state updates).
+        await saveState(TEST_DIR, state);
+
+        // Measure write performance (rename-over-existing-file scenario)
+        const startTime = performance.now();
+        await saveState(TEST_DIR, state);
+        const duration = performance.now() - startTime;
+
+        // Verify <100ms performance requirement (NFR-P2)
+        expect(duration).toBeLessThan(100);
+      });
+
+      test('should handle sequential writes safely (no corruption)', async () => {
+        // Perform 5 sequential writes (truly sequential, not parallel)
+        for (let i = 1; i <= 5; i++) {
+          const state = createInitialState(`epic-${i}`);
+          state.workflow.currentStoryIndex = i;
+          await saveState(TEST_DIR, state);
+        }
+
+        // Verify final state is valid and readable
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).not.toBeNull();
+        expect(isValidState(loaded!)).toBe(true);
+        // Final state should be epic-5 (last write)
+        expect(loaded!.currentEpic).toBe('epic-5');
+        expect(loaded!.workflow.currentStoryIndex).toBe(5);
+      });
+
+      test('should produce state that loadState() can read (round-trip)', async () => {
+        const originalState = createInitialState('epic-round-trip');
+        originalState.workflow.currentStoryIndex = 5;
+        originalState.workflow.devReviewIteration = 2;
+        originalState.stories.completed = ['story-1', 'story-2', 'story-3'];
+        originalState.stories.approvals = { 'story-1': 'approved' };
+
+        await saveState(TEST_DIR, originalState);
+        const loaded = await loadState(TEST_DIR);
+
+        expect(loaded).not.toBeNull();
+        expect(loaded!.currentEpic).toBe('epic-round-trip');
+        expect(loaded!.workflow.currentStoryIndex).toBe(5);
+        expect(loaded!.workflow.devReviewIteration).toBe(2);
+        expect(loaded!.stories.completed).toEqual(['story-1', 'story-2', 'story-3']);
+        expect(loaded!.stories.approvals).toEqual({ 'story-1': 'approved' });
+      });
+    });
+
+    describe('saveState() error handling with recovery guidance', () => {
+      test('should throw error with code on disk full (ENOSPC)', async () => {
+        const state = createInitialState('epic-1');
+
+        // Mock writeFile to fail with ENOSPC
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockRejectedValue(
+          Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' })
+        );
+
+        try {
+          await expect(saveState(TEST_DIR, state)).rejects.toThrow('ENOSPC');
+        } finally {
+          writeFileSpy.mockRestore();
+        }
+      });
+
+      test('should throw error with code on permission denied (EACCES)', async () => {
+        const state = createInitialState('epic-1');
+
+        // Mock writeFile to fail with EACCES
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockRejectedValue(
+          Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
+        );
+
+        try {
+          await expect(saveState(TEST_DIR, state)).rejects.toThrow('EACCES');
+        } finally {
+          writeFileSpy.mockRestore();
+        }
+      });
+
+      test('should propagate error context for debugging', async () => {
+        const state = createInitialState('epic-1');
+
+        // Mock writeFile to fail with specific error message
+        const errorMsg = 'ENOSPC: no space left on device, write';
+        const writeFileSpy = spyOn(fsPromises, 'writeFile').mockRejectedValue(
+          Object.assign(new Error(errorMsg), { code: 'ENOSPC' })
+        );
+
+        try {
+          try {
+            await saveState(TEST_DIR, state);
+            expect.unreachable('Should have thrown error');
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toContain('ENOSPC');
+          }
+        } finally {
+          writeFileSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('saveState() crash recovery validation', () => {
+      test('should ignore orphaned .tmp files during loadState()', async () => {
+        // Create orphaned .tmp file (simulates crash during write)
+        const tmpPath = `${getStateFilePath(TEST_DIR)}.tmp`;
+        const orphanedContent = JSON.stringify(createInitialState('epic-orphaned'));
+        await writeFile(tmpPath, orphanedContent, 'utf-8');
+
+        // loadState() should ignore .tmp file and return null (no state found)
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+
+        // Verify .tmp file still exists (not accidentally deleted)
+        const tmpExists = await access(tmpPath).then(() => true).catch(() => false);
+        expect(tmpExists).toBe(true);
+      });
+
+      test('should successfully read state after interrupted write leaves .tmp file', async () => {
+        // Create valid state file
+        const validState = createInitialState('epic-valid');
+        await saveState(TEST_DIR, validState);
+
+        // Create orphaned .tmp file (simulates crash during subsequent write)
+        const tmpPath = `${getStateFilePath(TEST_DIR)}.tmp`;
+        const orphanedContent = JSON.stringify(createInitialState('epic-interrupted'));
+        await writeFile(tmpPath, orphanedContent, 'utf-8');
+
+        // loadState() should read the valid state file, not the .tmp
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).not.toBeNull();
+        expect(loaded!.currentEpic).toBe('epic-valid');
+      });
+
+      test('should produce valid state after simulated crash during saveState()', async () => {
+        // First write succeeds
+        const firstState = createInitialState('epic-first');
+        await saveState(TEST_DIR, firstState);
+
+        // Second write fails after writeFile but before rename (simulated crash)
+        const secondState = createInitialState('epic-second');
+        const renameSpy = spyOn(fsPromises, 'rename').mockRejectedValue(
+          new Error('Simulated crash during rename')
+        );
+
+        await expect(saveState(TEST_DIR, secondState)).rejects.toThrow('crash');
+
+        renameSpy.mockRestore();
+
+        // Verify either old state exists OR new state exists (never partial/corrupt)
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).not.toBeNull();
+        expect(isValidState(loaded!)).toBe(true);
+
+        // After crash, old state should still be present (atomic guarantee)
+        expect(loaded!.currentEpic).toBe('epic-first');
+      });
+    });
+
+    describe('saveState() integration tests', () => {
+      test('should handle all state complexity levels', async () => {
+        const complexStates = [
+          // Minimal state
+          createInitialState('epic-minimal'),
+
+          // State with completed stories
+          (() => {
+            const state = createInitialState('epic-with-stories');
+            state.stories.completed = ['story-1', 'story-2', 'story-3'];
+            return state;
+          })(),
+
+          // State with approvals
+          (() => {
+            const state = createInitialState('epic-with-approvals');
+            state.stories.approvals = {
+              'story-1': 'approved',
+              'story-2': 'needs-changes',
+              'story-3': 'pending'
+            };
+            return state;
+          })(),
+
+          // Large state (many completed stories)
+          (() => {
+            const state = createInitialState('epic-large');
+            state.stories.completed = Array.from({ length: 50 }, (_, i) => `story-${i + 1}`);
+            return state;
+          })()
+        ];
+
+        // Save and load each complexity level
+        for (const state of complexStates) {
+          await saveState(TEST_DIR, state);
+          const loaded = await loadState(TEST_DIR);
+
+          expect(loaded).not.toBeNull();
+          expect(loaded!.currentEpic).toBe(state.currentEpic);
+          expect(loaded!.stories.completed.length).toBe(state.stories.completed.length);
+        }
+      });
+
+      test('should produce valid JSON that external tools can parse', async () => {
+        const state = createInitialState('epic-json-valid');
+        state.stories.completed = ['story-1'];
+        await saveState(TEST_DIR, state);
+
+        const statePath = getStateFilePath(TEST_DIR);
+        const rawContent = await readFile(statePath, 'utf-8');
+
+        // Verify JSON is parseable
+        const parsed = JSON.parse(rawContent);
+        expect(parsed.currentEpic).toBe('epic-json-valid');
+
+        // Verify JSON is pretty-printed (2-space indent)
+        expect(rawContent).toContain('  "currentEpic"');
+      });
     });
   });
 

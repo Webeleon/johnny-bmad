@@ -104,6 +104,48 @@ Examples:
 `);
 }
 
+/**
+ * Formats an error with recovery guidance per Rule 5
+ * @internal Exported for testing only
+ */
+export function formatErrorWithRecovery(err: unknown): { message: string; recovery: string } {
+  // Handle errors with built-in recovery guidance
+  if (err instanceof StatePermissionError || err instanceof MigrationSaveError) {
+    return { message: `[ERROR] ${err.message}`, recovery: `        ${err.recovery}` };
+  }
+
+  // Handle filesystem errors with specific recovery guidance (Rule 5)
+  // Type guard: NodeJS.ErrnoException has string code property
+  // Use documented cast to Record<string, unknown> to check code property safely
+  if (err instanceof Error && 'code' in err && typeof (err as Record<string, unknown>).code === 'string') {
+    const fsError = err as NodeJS.ErrnoException;
+
+    if (fsError.code === 'ENOSPC') {
+      return {
+        message: '[ERROR] Operation failed: disk is full',
+        recovery: '        Try: Free up disk space and run johnny-bmad again'
+      };
+    } else if (fsError.code === 'EACCES') {
+      return {
+        message: '[ERROR] Operation failed: permission denied',
+        recovery: '        Try: Check file permissions or run with appropriate access rights'
+      };
+    } else {
+      // Other filesystem errors with generic recovery
+      return {
+        message: `[ERROR] Fatal error: ${fsError.message}`,
+        recovery: '        Try: Run johnny-bmad again to resume from saved state'
+      };
+    }
+  }
+
+  // Generic fatal error handling
+  return {
+    message: `[ERROR] Fatal error: ${err instanceof Error ? err.message : String(err)}`,
+    recovery: '        Try: Run johnny-bmad again to resume from saved state'
+  };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -115,21 +157,35 @@ async function main(): Promise<void> {
   try {
     await runOrchestrator(args);
   } catch (err) {
-    // Handle migration-specific errors with appropriate exit codes
+    /**
+     * Error Handling Routing Contract:
+     *
+     * Two-tier error handling approach:
+     * 1. Migration/User-Interaction Errors (MigrationDeclinedError, NonInteractiveError):
+     *    - Handled directly in this catch block
+     *    - Already displayed their own user-friendly messages
+     *    - Just exit with code 1
+     *
+     * 2. All Other Errors (filesystem, state, unexpected):
+     *    - Routed to formatErrorWithRecovery() for consistent formatting
+     *    - Includes ENOSPC, EACCES filesystem errors with specific recovery guidance
+     *    - Includes StatePermissionError, MigrationSaveError with built-in recovery
+     *    - Generic errors get standard recovery message
+     *
+     * This separation ensures migration UX remains clean while other errors
+     * get actionable recovery guidance following Rule 5 (Try: pattern).
+     */
     if (err instanceof MigrationDeclinedError || err instanceof NonInteractiveError) {
       // Error messages already displayed by promptMigration()
       process.exit(1);
-    } else if (err instanceof StatePermissionError || err instanceof MigrationSaveError) {
-      // Handle errors with recovery guidance (NFR-R6, Rule 5)
-      console.error(`[ERROR] ${err.message}`);
-      console.error(`        ${err.recovery}`);
-      process.exit(1);
-    } else {
-      // Generic fatal error handling
-      console.error('[ERROR] Fatal error:', err instanceof Error ? err.message : String(err));
-      console.error('        Try: Run johnny-bmad again to resume from saved state');
-      process.exit(1);
+      return; // Defensive: prevent fall-through if process.exit is mocked or behavior changes
     }
+
+    // Format all other errors with recovery guidance
+    const { message, recovery } = formatErrorWithRecovery(err);
+    console.error(message);
+    console.error(recovery);
+    process.exit(1);
   }
 }
 
