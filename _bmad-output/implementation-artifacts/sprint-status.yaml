@@ -8,7 +8,7 @@ development_status:
   1-1-define-enhanced-state-typescript-interface: done
   1-2-implement-v0-2-0-state-detection-and-migration: done
   1-3-implement-atomic-state-write-operations: done
-  1-4-implement-corrupt-state-detection-and-recovery: review
+  1-4-implement-corrupt-state-detection-and-recovery: done
   epic-1-retrospective: optional
   epic-2: backlog
   2-1-add-batch-and-dev-only-flag-parsing: backlog

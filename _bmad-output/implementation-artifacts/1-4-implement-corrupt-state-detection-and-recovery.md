@@ -1,6 +1,6 @@
 # Story 1.4: Implement Corrupt State Detection and Recovery
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -145,6 +145,14 @@ So that I can continue working without manual file editing.
 - [x] [AI-Review][LOW] Story file accumulated 7 resolution sections (lines 438-643) with evolving test counts creating confusing narrative. Consider consolidating to a single authoritative "Final Status" section replacing the 7 separate round sections.
 - [x] [AI-Review][LOW] Reusing `MigrationSaveError` for recovery save failures [config.ts:563] remains semantically inaccurate. Tracked since Round 7. Non-blocking tech debt for future refactoring to `StateSaveError` or similar.
 - [x] [AI-Review][LOW] Pre-existing `consoleSpy = spyOn(console, 'log')` pattern in 3 describe blocks [config.test.ts:194,292,970] suppresses ALL console.log. Story 1.4 continues pattern. Tech debt for future test cleanup targeting specific logger functions.
+
+### Review Follow-ups Round 9 (AI)
+
+- [ ] [AI-Review][MEDIUM] `attemptPartialRecovery()` `PartialRecoveredState` type allows independently `undefined` sub-fields in `stories` (completed, approvals). Future State field additions require matching `?? default` at construction [config.ts:564-566]. Add comment noting this extensibility requirement near the `PartialRecoveredState` type definition or at state construction site.
+- [ ] [AI-Review][MEDIUM] Save failure test calls `attemptPartialRecovery()` twice [config.test.ts:2915 and 2918-2926]. First call uses `rejects.toThrow()`, second duplicates in nested try/catch for message verification. Consolidate into single call that captures the rejection and asserts both error type and message.
+- [ ] [AI-Review][MEDIUM] Story Completion Notes accumulated 8 resolution sections (~280 lines, story lines 410-687) with multiple contradictory "Final Status" declarations. Consolidate to single authoritative final-status section. Current format makes it difficult to determine actual story state.
+- [ ] [AI-Review][LOW] Pre-existing TypeScript errors in `src/agents/reviewer.ts:51` (TS18047) and `src/utils/user-input.test.ts:12,22,32` (TS2739) persist. Not from Story 1.4. Track as tech debt.
+- [ ] [AI-Review][LOW] `warn()` messages from `promptCorruptRecovery()` leak to test console in Story 1.4 tests [config.test.ts:2569-2589, 2660-2682] because those tests don't suppress console.log. Add consoleSpy to suppress noisy output, matching pattern in parent describe blocks.
 
 ## Dev Notes
 
