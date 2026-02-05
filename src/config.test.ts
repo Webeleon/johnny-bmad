@@ -132,7 +132,7 @@ describe('config.ts - State Management', () => {
       expect(loaded?.stories.completed).toHaveLength(0);
     });
 
-    test('should return null when no state file exists', async () => {
+    test('should attempt partial recovery when no state file exists', async () => {
       const loaded = await loadState(TEST_DIR);
       expect(loaded).toBeNull();
     });
@@ -195,54 +195,107 @@ describe('config.ts - State Management', () => {
     beforeEach(() => { consoleSpy = spyOn(console, 'log').mockImplementation(() => {}); });
     afterEach(() => { consoleSpy.mockRestore(); });
 
-    test('should return null for corrupted JSON', async () => {
+    test('should return null for corrupted JSON (after user chooses delete)', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true; // Mock TTY for interactive recovery
+
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '{ invalid json content }', 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
-    test('should return null for empty file', async () => {
+    test('should return null for empty file (after user chooses delete)', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true; // Mock TTY for interactive recovery
+
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '', 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
-    test('should return null for non-object JSON', async () => {
+    test('should return null for non-object JSON (after user chooses delete)', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true; // Mock TTY for interactive recovery
+
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '"just a string"', 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
-    test('should return null for array JSON', async () => {
+    test('should return null for array JSON (after user chooses delete)', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true; // Mock TTY for interactive recovery
+
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '[]', 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
-    test('should return null for null JSON', async () => {
+    test('should return null for null JSON (after user chooses delete)', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true; // Mock TTY for interactive recovery
+
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, 'null', 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        expect(loaded).toBeNull();
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
   });
 
-  describe('loadState() - Invalid State Structure', () => {
+  describe('loadState() - Invalid State Structure (with partial recovery)', () => {
     // Suppress warn() output from loadState() invalid structure detection
     let consoleSpy: ReturnType<typeof spyOn>;
     beforeEach(() => { consoleSpy = spyOn(console, 'log').mockImplementation(() => {}); });
     afterEach(() => { consoleSpy.mockRestore(); });
 
-    test('should return null when missing workflow object', async () => {
+    test('should recover when missing workflow object', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      process.stdin.isTTY = true;
+
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -252,11 +305,21 @@ describe('config.ts - State Management', () => {
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const loaded = await loadState(TEST_DIR);
-      expect(loaded).toBeNull();
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+      try {
+        const loaded = await loadState(TEST_DIR);
+        // Should recover with workflow defaults
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+      } finally {
+        process.stdin.isTTY = originalIsTTY;
+        inquirerSpy.mockRestore();
+      }
     });
 
-    test('should return null when missing stories object', async () => {
+    test('should attempt partial recovery when missing stories object', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -270,7 +333,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when workflow.mode is invalid', async () => {
+    test('should attempt partial recovery when workflow.mode is invalid', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -284,7 +347,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when workflow.phase is invalid', async () => {
+    test('should attempt partial recovery when workflow.phase is invalid', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -298,7 +361,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.completed is not an array', async () => {
+    test('should attempt partial recovery when stories.completed is not an array', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -312,7 +375,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when currentStoryIndex is not a number', async () => {
+    test('should attempt partial recovery when currentStoryIndex is not a number', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -326,7 +389,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.approvals has invalid status value', async () => {
+    test('should attempt partial recovery when stories.approvals has invalid status value', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -345,7 +408,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.approvals has mixed valid and invalid statuses', async () => {
+    test('should attempt partial recovery when stories.approvals has mixed valid and invalid statuses', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -366,7 +429,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when workflow is an array instead of object', async () => {
+    test('should attempt partial recovery when workflow is an array instead of object', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -380,7 +443,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.approvals is an array instead of object', async () => {
+    test('should attempt partial recovery when stories.approvals is an array instead of object', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -397,7 +460,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when currentEpic is empty string', async () => {
+    test('should attempt partial recovery when currentEpic is empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: '',
@@ -411,7 +474,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when currentEpic is whitespace only', async () => {
+    test('should attempt partial recovery when currentEpic is whitespace only', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: '   ',
@@ -425,7 +488,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when lastUpdated is empty string', async () => {
+    test('should attempt partial recovery when lastUpdated is empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -439,7 +502,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.completed contains non-string element', async () => {
+    test('should attempt partial recovery when stories.completed contains non-string element', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -456,7 +519,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.completed contains null element', async () => {
+    test('should attempt partial recovery when stories.completed contains null element', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -473,7 +536,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when currentStoryIndex is negative', async () => {
+    test('should attempt partial recovery when currentStoryIndex is negative', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -487,7 +550,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when devReviewIteration is negative', async () => {
+    test('should attempt partial recovery when devReviewIteration is negative', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -501,7 +564,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.completed contains empty string', async () => {
+    test('should attempt partial recovery when stories.completed contains empty string', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -518,7 +581,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when stories.completed contains whitespace-only string', async () => {
+    test('should attempt partial recovery when stories.completed contains whitespace-only string', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -535,7 +598,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when lastUpdated is not a valid ISO date (v1+ state)', async () => {
+    test('should attempt partial recovery when lastUpdated is not a valid ISO date (v1+ state)', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidState = {
         currentEpic: 'epic-1',
@@ -549,7 +612,7 @@ describe('config.ts - State Management', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should return null when lastUpdated is not a valid ISO date (legacy state)', async () => {
+    test('should attempt partial recovery when lastUpdated is not a valid ISO date (legacy state)', async () => {
       const path = getStateFilePath(TEST_DIR);
       const invalidLegacyState = {
         currentEpic: 'epic-1',
@@ -2104,6 +2167,499 @@ describe('config.ts - State Management', () => {
 
         // Verify JSON is pretty-printed (2-space indent)
         expect(rawContent).toContain('  "currentEpic"');
+      });
+    });
+  });
+
+  describe('config.ts - Corrupt State Detection and Recovery (Story 1.4)', () => {
+    describe('promptCorruptRecovery()', () => {
+      test('should display [WARN] corrupt state message', async () => {
+        const { promptCorruptRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          await promptCorruptRecovery(TEST_DIR);
+
+          // Verify warn() was called (it logs to console.log internally)
+          // The warn() function from logger.js calls console.log with formatted messages
+          expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should offer "1. Delete and start fresh  2. Exit and fix manually"', async () => {
+        const { promptCorruptRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          await promptCorruptRecovery(TEST_DIR);
+
+          // Verify prompt was called with correct options
+          const promptCall = inquirerSpy.mock.calls[0][0];
+          expect(Array.isArray(promptCall)).toBe(true);
+          const question = (promptCall as any[])[0];
+          expect(question.message).toContain('Corrupt state file detected');
+          expect(question.choices).toBeDefined();
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should delete state and return null when user selects option 1', async () => {
+        const { promptCorruptRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        // Create a state file to be deleted
+        const state = createInitialState('epic-1');
+        await saveState(TEST_DIR, state);
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          const result = await promptCorruptRecovery(TEST_DIR);
+
+          expect(result).toBeNull();
+
+          // Verify state file was deleted
+          const statePath = getStateFilePath(TEST_DIR);
+          await expect(access(statePath)).rejects.toThrow('ENOENT');
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should throw CorruptStateError when user selects option 2', async () => {
+        const { promptCorruptRecovery, CorruptStateError } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '2' });
+
+        try {
+          let caughtError: Error | null = null;
+          try {
+            await promptCorruptRecovery(TEST_DIR);
+          } catch (error) {
+            caughtError = error as Error;
+          }
+
+          expect(caughtError).toBeInstanceOf(CorruptStateError);
+          expect(caughtError?.message).toContain('corrupt state');
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should throw with recovery message in non-interactive environment', async () => {
+        const { promptCorruptRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = false;
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+        try {
+          let caughtError: Error | null = null;
+          try {
+            await promptCorruptRecovery(TEST_DIR);
+          } catch (error) {
+            caughtError = error as Error;
+          }
+
+          expect(caughtError).toBeInstanceOf(NonInteractiveError);
+
+          // Verify warn() was called (it logs to console.log internally)
+          expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('loadState() corrupt JSON handling integration', () => {
+      test('should trigger recovery prompt on invalid JSON (not silent null)', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const path = getStateFilePath(TEST_DIR);
+        await writeFile(path, '{ invalid json }', 'utf-8');
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          const result = await loadState(TEST_DIR);
+
+          // Verify inquirer.prompt was called (recovery prompt triggered)
+          expect(inquirerSpy.mock.calls.length).toBeGreaterThan(0);
+          expect(result).toBeNull(); // After deletion
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should handle user selecting "delete and start fresh" for corrupt JSON', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const path = getStateFilePath(TEST_DIR);
+        await writeFile(path, '{ not valid json', 'utf-8');
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          const result = await loadState(TEST_DIR);
+
+          expect(result).toBeNull();
+
+          // Verify state file was deleted
+          await expect(access(path)).rejects.toThrow('ENOENT');
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should throw CorruptStateError when user selects "exit and fix manually"', async () => {
+        const { CorruptStateError } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true; // Mock TTY for interactive tests
+
+        const path = getStateFilePath(TEST_DIR);
+        await writeFile(path, '{ malformed', 'utf-8');
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '2' });
+
+        try {
+          let caughtError: Error | null = null;
+          try {
+            await loadState(TEST_DIR);
+          } catch (error) {
+            caughtError = error as Error;
+          }
+
+          expect(caughtError).toBeInstanceOf(CorruptStateError);
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('attemptPartialRecovery()', () => {
+      test('should recover valid currentEpic from otherwise invalid state', async () => {
+        // RED: This should fail because attemptPartialRecovery() doesn't exist yet
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString(),
+          workflow: { mode: 'invalid-mode' }, // Invalid workflow
+          stories: { completed: [], approvals: {} }
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          const result = await attemptPartialRecovery(partialState, TEST_DIR);
+
+          expect(result).not.toBeNull();
+          expect(result?.currentEpic).toBe('epic-1');
+          expect(result?.workflow.mode).toBe('sequential'); // Filled with default
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should recover valid workflow fields from partial state', async () => {
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString(),
+          workflow: {
+            mode: 'batch',
+            phase: 'review',
+            currentStoryIndex: 2,
+            devReviewIteration: 1
+          },
+          stories: { completed: 'not-an-array' } // Invalid stories
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          const result = await attemptPartialRecovery(partialState, TEST_DIR);
+
+          expect(result).not.toBeNull();
+          expect(result?.workflow.mode).toBe('batch');
+          expect(result?.workflow.phase).toBe('review');
+          expect(result?.stories.completed).toEqual([]); // Filled with default
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should display recovered vs lost fields', async () => {
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString(),
+          workflow: { mode: 'invalid' },
+          stories: { completed: [], approvals: {} }
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          await attemptPartialRecovery(partialState, TEST_DIR);
+
+          // Verify warn() was called to display recovery info
+          expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should attempt partial recovery when no fields recoverable', async () => {
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const completelyInvalidState = {
+          // Missing currentEpic
+          invalidField: 'invalid'
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+
+        try {
+          const result = await attemptPartialRecovery(completelyInvalidState, TEST_DIR);
+
+          // When nothing recoverable, falls through to corrupt prompt
+          expect(result).toBeNull();
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should fill missing fields with defaults when user accepts', async () => {
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString()
+          // Missing workflow and stories
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          const result = await attemptPartialRecovery(partialState, TEST_DIR);
+
+          expect(result).not.toBeNull();
+          expect(result?.currentEpic).toBe('epic-1');
+          expect(result?.workflow.mode).toBe('sequential');
+          expect(result?.workflow.phase).toBe('implementation');
+          expect(result?.stories.completed).toEqual([]);
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should fall through to corrupt prompt when user rejects', async () => {
+        const { attemptPartialRecovery } = await import('./config.js');
+
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString()
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt')
+          .mockResolvedValueOnce({ accept: false }) // Reject partial recovery
+          .mockResolvedValueOnce({ option: '1' }); // Then choose delete
+
+        try {
+          const result = await attemptPartialRecovery(partialState, TEST_DIR);
+
+          // User rejected, then chose delete
+          expect(result).toBeNull();
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('loadState() partial recovery integration', () => {
+      test('should attempt partial recovery on invalid structure', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const path = getStateFilePath(TEST_DIR);
+        const invalidState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString(),
+          workflow: { mode: 'invalid-mode' }
+        };
+        await writeFile(path, JSON.stringify(invalidState), 'utf-8');
+
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          const result = await loadState(TEST_DIR);
+
+          // Should recover with defaults
+          expect(result).not.toBeNull();
+          expect(result?.currentEpic).toBe('epic-1');
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          inquirerSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('Valid state 100% restore guarantee (AC #3)', () => {
+      test('should restore exact state for all workflow modes', async () => {
+        const modes: Array<'sequential' | 'batch' | 'dev-only'> = ['sequential', 'batch', 'dev-only'];
+
+        for (const mode of modes) {
+          const state = createInitialState('epic-test');
+          state.workflow.mode = mode;
+          state.workflow.currentStoryIndex = 5;
+          state.stories.completed = ['story-1', 'story-2'];
+          await saveState(TEST_DIR, state);
+
+          const loaded = await loadState(TEST_DIR);
+
+          expect(loaded).not.toBeNull();
+          expect(loaded?.workflow.mode).toBe(mode);
+          expect(loaded?.workflow.currentStoryIndex).toBe(5);
+          expect(loaded?.stories.completed).toEqual(['story-1', 'story-2']);
+        }
+      });
+
+      test('should restore exact state for all workflow phases', async () => {
+        const phases: Array<'story-creation' | 'review' | 'implementation'> = ['story-creation', 'review', 'implementation'];
+
+        for (const phase of phases) {
+          const state = createInitialState('epic-test');
+          state.workflow.phase = phase;
+          state.workflow.devReviewIteration = 3;
+          await saveState(TEST_DIR, state);
+
+          const loaded = await loadState(TEST_DIR);
+
+          expect(loaded).not.toBeNull();
+          expect(loaded?.workflow.phase).toBe(phase);
+          expect(loaded?.workflow.devReviewIteration).toBe(3);
+        }
+      });
+
+      test('should restore exact state with all fields populated', async () => {
+        const state = createInitialState('epic-complex');
+        state.workflow.mode = 'batch';
+        state.workflow.phase = 'review';
+        state.workflow.currentStoryIndex = 7;
+        state.workflow.devReviewIteration = 2;
+        state.stories.completed = ['story-1', 'story-2', 'story-3', 'story-4'];
+        state.stories.approvals = {
+          'story-1': 'approved',
+          'story-2': 'needs-changes',
+          'story-3': 'pending'
+        };
+
+        await saveState(TEST_DIR, state);
+        const loaded = await loadState(TEST_DIR);
+
+        expect(loaded).not.toBeNull();
+        expect(loaded?.currentEpic).toBe('epic-complex');
+        expect(loaded?.workflow.mode).toBe('batch');
+        expect(loaded?.workflow.phase).toBe('review');
+        expect(loaded?.workflow.currentStoryIndex).toBe(7);
+        expect(loaded?.workflow.devReviewIteration).toBe(2);
+        expect(loaded?.stories.completed).toEqual(['story-1', 'story-2', 'story-3', 'story-4']);
+        expect(loaded?.stories.approvals).toEqual({
+          'story-1': 'approved',
+          'story-2': 'needs-changes',
+          'story-3': 'pending'
+        });
+      });
+
+      test('should restore state losslessly through save/load cycle', async () => {
+        const originalState = createInitialState('epic-round-trip');
+        originalState.workflow.mode = 'dev-only';
+        originalState.workflow.currentStoryIndex = 10;
+        originalState.stories.completed = ['a', 'b', 'c'];
+
+        const timestamp1 = await saveState(TEST_DIR, originalState);
+        const loaded1 = await loadState(TEST_DIR);
+
+        expect(loaded1).not.toBeNull();
+        expect(loaded1?.lastUpdated).toBe(timestamp1);
+
+        // Second save/load cycle
+        const timestamp2 = await saveState(TEST_DIR, loaded1!);
+        const loaded2 = await loadState(TEST_DIR);
+
+        expect(loaded2).not.toBeNull();
+        expect(loaded2?.lastUpdated).toBe(timestamp2);
+        expect(loaded2?.workflow.mode).toBe('dev-only');
+        expect(loaded2?.workflow.currentStoryIndex).toBe(10);
       });
     });
   });

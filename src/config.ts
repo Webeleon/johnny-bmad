@@ -56,6 +56,17 @@ export class MigrationSaveError extends Error {
 }
 
 /**
+ * Error thrown when user chooses to exit and fix corrupt state manually
+ * Used in corrupt state recovery flow (Story 1.4)
+ */
+export class CorruptStateError extends Error {
+  constructor(message: string = 'Corrupt state file - user chose to fix manually') {
+    super(message);
+    this.name = 'CorruptStateError';
+  }
+}
+
+/**
  * Default workflow mode for new state objects and migrated legacy states
  * Ensures backward compatibility by defaulting to sequential mode
  *
@@ -351,6 +362,279 @@ export async function promptMigration(
   }
 }
 
+/**
+ * Attempts to partially recover a structurally invalid state
+ *
+ * @param parsed - The parsed but invalid state object
+ * @param cwd - Current working directory
+ * @returns Recovered State if user accepts, or null if user rejects/nothing recoverable
+ * @throws {CorruptStateError} When user chooses to exit and fix manually (via promptCorruptRecovery)
+ * @throws {NonInteractiveError} When prompt fails in non-interactive environment
+ *
+ * @remarks
+ * This function attempts to extract valid fields from a state that failed `isValidState()` and `isLegacyState()`.
+ * It recovers what it can, fills missing fields with defaults, and prompts user for acceptance.
+ * If nothing is recoverable, it falls through to promptCorruptRecovery().
+ *
+ * @example
+ * ```typescript
+ * const partialState = {
+ *   currentEpic: 'epic-1',
+ *   lastUpdated: '2026-02-05...',
+ *   workflow: { mode: 'invalid-mode' } // Invalid field
+ * };
+ * const recovered = await attemptPartialRecovery(partialState, cwd);
+ * // recovered.currentEpic === 'epic-1' (preserved)
+ * // recovered.workflow.mode === 'sequential' (default)
+ * ```
+ */
+export async function attemptPartialRecovery(
+  parsed: unknown,
+  cwd: string
+): Promise<State | null> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    // Cannot recover from non-object - fall through to corrupt prompt
+    return await promptCorruptRecovery(cwd);
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  const recovered: Partial<State> = {};
+  const lost: string[] = [];
+
+  // Try to recover currentEpic
+  if (typeof obj.currentEpic === 'string' && obj.currentEpic.trim() !== '') {
+    const epicPattern = /^[a-zA-Z0-9_-]+$/;
+    if (epicPattern.test(obj.currentEpic)) {
+      recovered.currentEpic = obj.currentEpic;
+    } else {
+      lost.push('currentEpic (invalid pattern)');
+    }
+  } else {
+    lost.push('currentEpic');
+  }
+
+  // Try to recover lastUpdated
+  if (typeof obj.lastUpdated === 'string' && !isNaN(Date.parse(obj.lastUpdated))) {
+    recovered.lastUpdated = obj.lastUpdated;
+  } else {
+    lost.push('lastUpdated');
+  }
+
+  // Try to recover workflow fields
+  let workflowRecovered = false;
+  if (obj.workflow && typeof obj.workflow === 'object' && !Array.isArray(obj.workflow)) {
+    const workflow = obj.workflow as Record<string, unknown>;
+    const partialWorkflow: Record<string, unknown> = {};
+
+    if (['sequential', 'batch', 'dev-only'].includes(workflow.mode as string)) {
+      partialWorkflow.mode = workflow.mode;
+    }
+    if (['story-creation', 'review', 'implementation'].includes(workflow.phase as string)) {
+      partialWorkflow.phase = workflow.phase;
+    }
+    if (Number.isInteger(workflow.currentStoryIndex) && (workflow.currentStoryIndex as number) >= 0) {
+      partialWorkflow.currentStoryIndex = workflow.currentStoryIndex;
+    }
+    if (Number.isInteger(workflow.devReviewIteration) && (workflow.devReviewIteration as number) >= 0) {
+      partialWorkflow.devReviewIteration = workflow.devReviewIteration;
+    }
+
+    if (Object.keys(partialWorkflow).length > 0) {
+      recovered.workflow = partialWorkflow as any;
+      workflowRecovered = true;
+    }
+  }
+  if (!workflowRecovered) {
+    lost.push('workflow');
+  }
+
+  // Try to recover stories fields
+  let storiesRecovered = false;
+  if (obj.stories && typeof obj.stories === 'object' && !Array.isArray(obj.stories)) {
+    const stories = obj.stories as Record<string, unknown>;
+    const partialStories: Record<string, unknown> = {};
+
+    if (Array.isArray(stories.completed) && stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) {
+      partialStories.completed = stories.completed;
+    }
+    if (stories.approvals && typeof stories.approvals === 'object' && !Array.isArray(stories.approvals)) {
+      const approvals = stories.approvals as Record<string, unknown>;
+      const validStatuses = ['approved', 'needs-changes', 'pending'];
+      const allValid = Object.values(approvals).every((status: unknown) => validStatuses.includes(status as string));
+      if (allValid) {
+        partialStories.approvals = approvals;
+      }
+    }
+
+    if (Object.keys(partialStories).length > 0) {
+      recovered.stories = partialStories as any;
+      storiesRecovered = true;
+    }
+  }
+  if (!storiesRecovered) {
+    lost.push('stories');
+  }
+
+  // If nothing recoverable, fall through to corrupt prompt
+  if (!recovered.currentEpic && !recovered.lastUpdated && !workflowRecovered && !storiesRecovered) {
+    debug('No fields recoverable from invalid state');
+    return await promptCorruptRecovery(cwd);
+  }
+
+  // Display what was recovered vs lost
+  const recoveredFields = Object.keys(recovered).filter(key => recovered[key as keyof State] !== undefined);
+  if (recoveredFields.length > 0) {
+    warn(`Recovered fields: ${recoveredFields.join(', ')}`);
+  }
+  if (lost.length > 0) {
+    warn(`Lost fields: ${lost.join(', ')}`);
+  }
+
+  // Proactive TTY check
+  if (!process.stdin.isTTY) {
+    warn('Cannot prompt for partial recovery acceptance in non-interactive environment');
+    warn('Try: Run in interactive terminal or delete .johnny-bmad-state.json to start fresh');
+    throw new NonInteractiveError();
+  }
+
+  // Prompt user to accept partial recovery
+  let accept: boolean;
+  try {
+    const response = await inquirer.prompt<{ accept: boolean }>([
+      {
+        type: 'confirm',
+        name: 'accept',
+        message: 'Accept partial recovery with defaults for missing fields?',
+        default: true
+      }
+    ]);
+    accept = response.accept;
+  } catch (error) {
+    warn(`Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn('Try: Delete .johnny-bmad-state.json to start fresh');
+    throw error;
+  }
+
+  if (!accept) {
+    // User rejected - offer corrupt recovery options
+    debug('User rejected partial recovery');
+    return await promptCorruptRecovery(cwd);
+  }
+
+  // Build complete state with recovered + defaults
+  const completeState: State = {
+    currentEpic: recovered.currentEpic || 'epic-unknown',
+    lastUpdated: recovered.lastUpdated || new Date().toISOString(),
+    workflow: {
+      mode: (recovered.workflow as any)?.mode || DEFAULT_WORKFLOW_MODE,
+      phase: (recovered.workflow as any)?.phase || DEFAULT_WORKFLOW_PHASE,
+      currentStoryIndex: (recovered.workflow as any)?.currentStoryIndex ?? 0,
+      devReviewIteration: (recovered.workflow as any)?.devReviewIteration ?? 0
+    },
+    stories: {
+      completed: (recovered.stories as any)?.completed || [],
+      approvals: (recovered.stories as any)?.approvals || {}
+    }
+  };
+
+  // Save recovered state using atomic write
+  try {
+    await saveState(cwd, completeState);
+    debug('Saved recovered state with defaults');
+  } catch (saveError) {
+    throw new MigrationSaveError(
+      'Partial recovery completed but failed to save new state file',
+      'Try: Fix disk/permissions and restart to retry recovery',
+      saveError instanceof Error ? saveError : undefined
+    );
+  }
+
+  // Return the saved state (with disk timestamp)
+  const statePath = getStateFilePath(cwd);
+  const content = await readFile(statePath, 'utf-8');
+  return JSON.parse(content) as State;
+}
+
+/**
+ * Prompts user to recover from corrupt state file
+ *
+ * @param cwd - Current working directory
+ * @returns null if user chooses to delete and start fresh
+ * @throws {CorruptStateError} When user chooses to exit and fix manually
+ * @throws {NonInteractiveError} When prompt fails in non-interactive environment
+ *
+ * @remarks
+ * This function is called when loadState() detects invalid JSON or structurally invalid state.
+ * It offers two recovery options:
+ * 1. Delete corrupt state and start fresh (returns null)
+ * 2. Exit and fix manually (throws CorruptStateError)
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   const result = await promptCorruptRecovery(cwd);
+ *   if (result === null) {
+ *     // User chose to delete - orchestrator will create fresh state
+ *   }
+ * } catch (error) {
+ *   if (error instanceof CorruptStateError) {
+ *     // User chose to exit and fix manually
+ *     console.log(error.message);
+ *     process.exit(1);
+ *   }
+ * }
+ * ```
+ */
+export async function promptCorruptRecovery(cwd: string): Promise<null> {
+  // Proactive TTY check - same pattern as promptMigration()
+  if (!process.stdin.isTTY) {
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn('Cannot prompt for recovery in non-interactive environment');
+    warn('Try: Run in interactive terminal or delete .johnny-bmad-state.json to start fresh');
+    throw new NonInteractiveError();
+  }
+
+  // Display corrupt state warning
+  warn('Corrupt state file detected');
+
+  // Narrow try/catch to only wrap inquirer.prompt() call
+  let option: string;
+  try {
+    const response = await inquirer.prompt<{ option: string }>([
+      {
+        type: 'list',
+        name: 'option',
+        message: 'Corrupt state file detected. Choose recovery option:',
+        choices: [
+          { name: '1. Delete and start fresh', value: '1' },
+          { name: '2. Exit and fix manually', value: '2' }
+        ]
+      }
+    ]);
+    option = response.option;
+  } catch (error) {
+    // Unexpected error during prompt (not non-interactive since we checked TTY above)
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn(`Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn('Try: Delete .johnny-bmad-state.json to start fresh');
+    throw error; // Propagate unexpected errors
+  }
+
+  // Handle user response outside try/catch (no self-catch pattern)
+  if (option === '1') {
+    // User chose to delete and start fresh
+    await clearState(cwd);
+    debug('Deleted corrupt state file - starting fresh');
+    return null;
+  } else {
+    // User chose to exit and fix manually
+    // Per project-context.md Rule 5: Error messages must include recovery
+    warn('Exiting to allow manual state file fix');
+    warn('Try: Fix JSON in .johnny-bmad-state.json or delete the file');
+    throw new CorruptStateError('User chose to exit and fix corrupt state manually');
+  }
+}
+
 export async function loadState(cwd: string): Promise<State | null> {
   const statePath = getStateFilePath(cwd);
   try {
@@ -362,7 +646,8 @@ export async function loadState(cwd: string): Promise<State | null> {
       parsed = JSON.parse(content);
     } catch (parseError) {
       debug(`State file corrupted: invalid JSON at ${statePath}`);
-      return null;
+      // Offer interactive recovery instead of silent null return
+      return await promptCorruptRecovery(cwd);
     }
 
     // Validate it's a valid v1+ State
@@ -379,19 +664,18 @@ export async function loadState(cwd: string): Promise<State | null> {
     }
 
     // State file exists but has invalid/unknown structure
-    // Warn user so they know their state was rejected (NFR-R6: avoid silent data loss)
-    warn('State file found but has unrecognized structure. Starting fresh.');
-    warn('Try: Back up .johnny-bmad-state.json before it gets overwritten');
-    debug(`State file has invalid structure at ${statePath}`);
-    return null;
+    // Attempt partial recovery instead of silent null return (Story 1.4, AC #2)
+    debug(`State file has invalid structure at ${statePath} - attempting partial recovery`);
+    return await attemptPartialRecovery(parsed, cwd);
   } catch (error: unknown) {
-    // Re-throw migration, permission, and unknown errors to caller (CLI handles exit)
+    // Re-throw migration, permission, corrupt state, and unknown errors to caller (CLI handles exit)
     // Prevents silent null return that could cause orchestrator to overwrite user's legacy progress
     if (
       error instanceof MigrationDeclinedError ||
       error instanceof MigrationSaveError ||
       error instanceof NonInteractiveError ||
-      error instanceof StatePermissionError
+      error instanceof StatePermissionError ||
+      error instanceof CorruptStateError
     ) {
       throw error;
     }
