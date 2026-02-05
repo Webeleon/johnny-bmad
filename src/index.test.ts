@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test';
-import { formatErrorWithRecovery } from './index.js';
+import { describe, test, expect, spyOn } from 'bun:test';
+import { formatErrorWithRecovery, parseArgs, showHelp, main } from './index.js';
 import { StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 
 describe('index.ts - Error Handling', () => {
@@ -103,6 +103,230 @@ describe('index.ts - Error Handling', () => {
       // Should get generic error formatting (since CorruptStateError doesn't have recovery property)
       expect(result.message).toBe('[ERROR] Fatal error: Corrupt state file - user chose to fix manually');
       expect(result.recovery).toBe('        Try: Run johnny-bmad again to resume from saved state');
+    });
+  });
+});
+
+describe('index.ts - Argument Parsing', () => {
+  describe('parseArgs()', () => {
+    test('should parse --batch flag', () => {
+      const args = parseArgs(['--batch']);
+      expect(args.batch).toBe(true);
+    });
+
+    test('should parse -b short flag', () => {
+      const args = parseArgs(['-b']);
+      expect(args.batch).toBe(true);
+    });
+
+    test('should parse --dev-only flag', () => {
+      const args = parseArgs(['--dev-only']);
+      expect(args.devOnly).toBe(true);
+    });
+
+    test('should parse -d short flag', () => {
+      const args = parseArgs(['-d']);
+      expect(args.devOnly).toBe(true);
+    });
+
+    test('should default all boolean flags to false with no args', () => {
+      const args = parseArgs([]);
+      expect(args.resume).toBe(false);
+      expect(args.help).toBe(false);
+      expect(args.verbose).toBe(false);
+      expect(args.yolo).toBe(false);
+      expect(args.batch).toBe(false);
+      expect(args.devOnly).toBe(false);
+      expect(args.maxIterations).toBeUndefined();
+    });
+
+    test('should parse --batch with other flags', () => {
+      const args = parseArgs(['--batch', '--yolo', '--verbose']);
+      expect(args.batch).toBe(true);
+      expect(args.yolo).toBe(true);
+      expect(args.verbose).toBe(true);
+    });
+
+    test('should parse --dev-only with other flags', () => {
+      const args = parseArgs(['--dev-only', '-v', '-y']);
+      expect(args.devOnly).toBe(true);
+      expect(args.verbose).toBe(true);
+      expect(args.yolo).toBe(true);
+    });
+
+    test('should preserve existing flag parsing', () => {
+      const args = parseArgs(['--resume', '--help', '--verbose', '--yolo']);
+      expect(args.resume).toBe(true);
+      expect(args.help).toBe(true);
+      expect(args.verbose).toBe(true);
+      expect(args.yolo).toBe(true);
+    });
+
+    test('should ignore unknown flags and not corrupt state', () => {
+      const args = parseArgs(['--unknown', '--batch']);
+      expect(args.batch).toBe(true);
+      expect(args.devOnly).toBe(false);
+      expect(args.resume).toBe(false);
+      expect(args.help).toBe(false);
+      expect(args.verbose).toBe(false);
+      expect(args.yolo).toBe(false);
+      expect(args.maxIterations).toBeUndefined();
+      // unknown flags silently ignored (no error thrown, no state corruption)
+    });
+
+    test('should parse --batch and --dev-only together', () => {
+      const args = parseArgs(['--batch', '--dev-only']);
+      expect(args.batch).toBe(true);
+      expect(args.devOnly).toBe(true);
+    });
+
+    test('should parse --max-iterations with value', () => {
+      const args = parseArgs(['--max-iterations', '5']);
+      expect(args.maxIterations).toBe(5);
+    });
+
+    test('should parse -m short flag with value', () => {
+      const args = parseArgs(['-m', '3']);
+      expect(args.maxIterations).toBe(3);
+    });
+
+    test('should ignore --max-iterations without valid value', () => {
+      const args = parseArgs(['--max-iterations']);
+      expect(args.maxIterations).toBeUndefined();
+    });
+
+    test('should ignore --max-iterations with non-numeric value', () => {
+      const args = parseArgs(['--max-iterations', 'abc']);
+      expect(args.maxIterations).toBeUndefined();
+    });
+
+    test('should ignore --max-iterations when next arg starts with dash', () => {
+      const args = parseArgs(['--max-iterations', '-5']);
+      expect(args.maxIterations).toBeUndefined();
+    });
+
+    test('should ignore --max-iterations with zero value', () => {
+      const args = parseArgs(['--max-iterations', '0']);
+      expect(args.maxIterations).toBeUndefined();
+    });
+
+    test('should parse --max-iterations combined with --batch', () => {
+      const args = parseArgs(['--max-iterations', '3', '--batch']);
+      expect(args.maxIterations).toBe(3);
+      expect(args.batch).toBe(true);
+    });
+
+    test('should parse --max-iterations combined with --dev-only', () => {
+      const args = parseArgs(['--max-iterations', '5', '--dev-only']);
+      expect(args.maxIterations).toBe(5);
+      expect(args.devOnly).toBe(true);
+    });
+
+    test('should parse --batch with --dev-only and --max-iterations', () => {
+      const args = parseArgs(['--batch', '-m', '7', '--dev-only']);
+      expect(args.batch).toBe(true);
+      expect(args.maxIterations).toBe(7);
+      expect(args.devOnly).toBe(true);
+    });
+
+    test('should handle value-consuming flag order interleaving deterministically', () => {
+      // Test that argument order doesn't affect parsing result
+      const args1 = parseArgs(['--batch', '-m', '5', '--dev-only']);
+      const args2 = parseArgs(['-m', '5', '--batch', '--dev-only']);
+      const args3 = parseArgs(['--dev-only', '--batch', '-m', '5']);
+
+      // All should produce identical results
+      expect(args1.batch).toBe(true);
+      expect(args1.maxIterations).toBe(5);
+      expect(args1.devOnly).toBe(true);
+
+      expect(args2.batch).toBe(true);
+      expect(args2.maxIterations).toBe(5);
+      expect(args2.devOnly).toBe(true);
+
+      expect(args3.batch).toBe(true);
+      expect(args3.maxIterations).toBe(5);
+      expect(args3.devOnly).toBe(true);
+    });
+  });
+
+  describe('showHelp()', () => {
+    test('should display help text with --batch flag documentation', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify --batch flag is documented
+        expect(helpOutput).toContain('--batch');
+        expect(helpOutput).toContain('-b');
+        expect(helpOutput).toContain('batch mode');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should display help text with --dev-only flag documentation', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify --dev-only flag is documented
+        expect(helpOutput).toContain('--dev-only');
+        expect(helpOutput).toContain('-d');
+        expect(helpOutput).toContain('dev-only mode');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should include usage examples for --batch and --dev-only flags', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify examples section includes new flags
+        expect(helpOutput).toContain('npx johnny-bmad --batch');
+        expect(helpOutput).toContain('npx johnny-bmad --dev-only');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('main() - Integration', () => {
+    test('should display help and exit when --help flag is passed', async () => {
+      const consoleSpy = spyOn(console, 'log');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+      const originalArgv = process.argv;
+
+      try {
+        // Set argv to simulate --help flag
+        process.argv = ['node', 'index.js', '--help'];
+
+        // main() should call showHelp() and then process.exit(0)
+        await expect(main()).rejects.toThrow('process.exit called');
+
+        // Verify showHelp() was called (console.log was invoked)
+        expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        expect(helpOutput).toContain('johnny-bmad');
+        expect(helpOutput).toContain('Options:');
+
+        // Verify process.exit(0) was called
+        expect(exitSpy).toHaveBeenCalledWith(0);
+      } finally {
+        consoleSpy.mockRestore();
+        exitSpy.mockRestore();
+        process.argv = originalArgv;
+      }
     });
   });
 });

@@ -18,12 +18,18 @@ process.on('unhandledRejection', (reason, _promise) => {
   process.exit(1);
 });
 
-function parseArgs(argv: string[]): CliArgs {
+/**
+ * Parse command line arguments
+ * @internal Exported for testing only
+ */
+export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     resume: false,
     help: false,
     verbose: false,
-    yolo: false
+    yolo: false,
+    batch: false,
+    devOnly: false
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -57,13 +63,25 @@ function parseArgs(argv: string[]): CliArgs {
       case '-y':
         args.yolo = true;
         break;
+      case '--batch':
+      case '-b':
+        args.batch = true;
+        break;
+      case '--dev-only':
+      case '-d':
+        args.devOnly = true;
+        break;
     }
   }
 
   return args;
 }
 
-function showHelp(): void {
+/**
+ * Display help text with usage information
+ * @internal Exported for testing only
+ */
+export function showHelp(): void {
   console.log(`
 johnny-bmad - BMAD Implementation Phase Automation
 
@@ -74,6 +92,8 @@ Options:
   --verbose, -v             Enable verbose/debug output
   --max-iterations, -m N    Max dev-review cycles per story (default: 10)
   --yolo, -y                Auto-complete stories when max iterations reached
+  --batch, -b               Run in batch mode (create and review all stories, no implementation)
+  --dev-only, -d            Run in dev-only mode (skip story creation, implement existing stories)
   --help, -h                Show this help message
 
 Description:
@@ -101,6 +121,8 @@ Examples:
   npx johnny-bmad --resume     # Auto-resume from last session
   npx johnny-bmad -v           # Verbose output for debugging
   npx johnny-bmad -m 5         # Limit to 5 dev-review cycles per story
+  npx johnny-bmad --batch      # Create and review all stories, no implementation
+  npx johnny-bmad --dev-only   # Skip story creation, implement existing stories
 `);
 }
 
@@ -146,7 +168,11 @@ export function formatErrorWithRecovery(err: unknown): { message: string; recove
   };
 }
 
-async function main(): Promise<void> {
+/**
+ * Main entry point - orchestrates CLI argument parsing and workflow execution
+ * @internal Exported for testing only
+ */
+export async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.help) {

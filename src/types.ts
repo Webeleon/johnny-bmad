@@ -77,6 +77,8 @@ export interface CliArgs {
   verbose: boolean;
   maxIterations?: number;
   yolo: boolean;
+  batch: boolean;
+  devOnly: boolean;
 }
 
 export interface BmadConfig {

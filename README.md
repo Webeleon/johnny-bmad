@@ -35,6 +35,8 @@ That's it. Johnny will:
 | `--verbose` | `-v` | Enable debug output for troubleshooting |
 | `--max-iterations N` | `-m N` | Max dev-review cycles per story (default: 10) |
 | `--yolo` | `-y` | Auto-complete stories when max iterations reached (no prompt) |
+| `--batch` | `-b` | Run in batch mode (create and review all stories, no implementation) |
+| `--dev-only` | `-d` | Run in dev-only mode (skip story creation, implement existing stories) |
 | `--help` | `-h` | Show help message |
 
 ```bash
@@ -45,6 +47,8 @@ johnny-bmad -v              # Verbose output for debugging
 johnny-bmad -m 5            # Limit to 5 dev-review cycles per story
 johnny-bmad --yolo          # YOLO mode: auto-mark stories done at max iterations
 johnny-bmad -m 3 -y         # 3 iterations max, auto-complete if stuck
+johnny-bmad --batch         # Create and review all stories, no implementation
+johnny-bmad --dev-only      # Skip story creation, implement existing stories
 ```
 
 ### Requirements

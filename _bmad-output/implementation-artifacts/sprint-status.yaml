@@ -4,14 +4,14 @@ project_key: johnny-bmad
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-define-enhanced-state-typescript-interface: done
   1-2-implement-v0-2-0-state-detection-and-migration: done
   1-3-implement-atomic-state-write-operations: done
   1-4-implement-corrupt-state-detection-and-recovery: done
   epic-1-retrospective: optional
-  epic-2: backlog
-  2-1-add-batch-and-dev-only-flag-parsing: backlog
+  epic-2: in-progress
+  2-1-add-batch-and-dev-only-flag-parsing: in-progress
   2-2-implement-flag-validation-mutually-exclusive-check: backlog
   2-3-implement-workflow-mode-determination: backlog
   2-4-update-help-text-with-new-flags-and-examples: backlog
