@@ -406,7 +406,14 @@ export async function attemptPartialRecovery(
   }
 
   const obj = parsed as Record<string, unknown>;
-  const recovered: Partial<State> = {};
+  // Type for partially recovered fields (supports undefined in nested structures)
+  type PartialRecoveredState = {
+    currentEpic?: string;
+    lastUpdated?: string;
+    workflow?: Partial<State['workflow']>;
+    stories?: Partial<State['stories']>;
+  };
+  const recovered: PartialRecoveredState = {};
   const lost: string[] = [];
 
   // Try to recover currentEpic
@@ -428,44 +435,50 @@ export async function attemptPartialRecovery(
     lost.push('lastUpdated');
   }
 
-  // Try to recover workflow fields
-  let workflowRecovered = false;
+  // Try to recover workflow fields (using typed intermediate to avoid later casts)
+  let recoveredMode: WorkflowMode | undefined;
+  let recoveredPhase: WorkflowPhase | undefined;
+  let recoveredStoryIndex: number | undefined;
+  let recoveredIteration: number | undefined;
+
   if (obj.workflow && typeof obj.workflow === 'object' && !Array.isArray(obj.workflow)) {
     const workflow = obj.workflow as Record<string, unknown>;
-    const partialWorkflow: Record<string, unknown> = {};
 
-    if (['sequential', 'batch', 'dev-only'].includes(workflow.mode as string)) {
-      partialWorkflow.mode = workflow.mode;
+    if (typeof workflow.mode === 'string' && ['sequential', 'batch', 'dev-only'].includes(workflow.mode)) {
+      recoveredMode = workflow.mode as WorkflowMode;
     }
-    if (['story-creation', 'review', 'implementation'].includes(workflow.phase as string)) {
-      partialWorkflow.phase = workflow.phase;
+    if (typeof workflow.phase === 'string' && ['story-creation', 'review', 'implementation'].includes(workflow.phase)) {
+      recoveredPhase = workflow.phase as WorkflowPhase;
     }
     if (Number.isInteger(workflow.currentStoryIndex) && (workflow.currentStoryIndex as number) >= 0) {
-      partialWorkflow.currentStoryIndex = workflow.currentStoryIndex;
+      recoveredStoryIndex = workflow.currentStoryIndex as number;
     }
     if (Number.isInteger(workflow.devReviewIteration) && (workflow.devReviewIteration as number) >= 0) {
-      partialWorkflow.devReviewIteration = workflow.devReviewIteration;
-    }
-
-    if (Object.keys(partialWorkflow).length > 0) {
-      // `as any` needed: partialWorkflow is Record<string, unknown> but workflow expects State['workflow']
-      // TypeScript can't verify partial objects match full interface at compile time
-      recovered.workflow = partialWorkflow as any;
-      workflowRecovered = true;
+      recoveredIteration = workflow.devReviewIteration as number;
     }
   }
-  if (!workflowRecovered) {
+
+  const workflowRecovered = !!(recoveredMode || recoveredPhase || recoveredStoryIndex !== undefined || recoveredIteration !== undefined);
+  if (workflowRecovered) {
+    recovered.workflow = {
+      mode: recoveredMode,
+      phase: recoveredPhase,
+      currentStoryIndex: recoveredStoryIndex,
+      devReviewIteration: recoveredIteration
+    };
+  } else {
     lost.push('workflow');
   }
 
-  // Try to recover stories fields
-  let storiesRecovered = false;
+  // Try to recover stories fields (using typed intermediate to avoid later casts)
+  let recoveredCompleted: string[] | undefined;
+  let recoveredApprovals: Record<string, 'approved' | 'needs-changes' | 'pending'> | undefined;
+
   if (obj.stories && typeof obj.stories === 'object' && !Array.isArray(obj.stories)) {
     const stories = obj.stories as Record<string, unknown>;
-    const partialStories: Record<string, unknown> = {};
 
     if (Array.isArray(stories.completed) && stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) {
-      partialStories.completed = [...stories.completed]; // Defensive copy to prevent downstream mutation
+      recoveredCompleted = [...stories.completed as string[]]; // Defensive copy to prevent downstream mutation
     }
     if (stories.approvals && typeof stories.approvals === 'object' && !Array.isArray(stories.approvals)) {
       const approvals = stories.approvals as Record<string, unknown>;
@@ -474,18 +487,18 @@ export async function attemptPartialRecovery(
         typeof status === 'string' && validStatuses.includes(status)
       );
       if (allValid) {
-        partialStories.approvals = { ...approvals }; // Defensive copy to prevent downstream mutation
+        recoveredApprovals = { ...approvals } as Record<string, 'approved' | 'needs-changes' | 'pending'>; // Defensive copy
       }
     }
-
-    if (Object.keys(partialStories).length > 0) {
-      // `as any` needed: partialStories is Record<string, unknown> but stories expects State['stories']
-      // TypeScript can't verify partial objects match full interface at compile time
-      recovered.stories = partialStories as any;
-      storiesRecovered = true;
-    }
   }
-  if (!storiesRecovered) {
+
+  const storiesRecovered = !!(recoveredCompleted || recoveredApprovals);
+  if (storiesRecovered) {
+    recovered.stories = {
+      completed: recoveredCompleted,
+      approvals: recoveredApprovals
+    };
+  } else {
     lost.push('stories');
   }
 
@@ -496,7 +509,10 @@ export async function attemptPartialRecovery(
   }
 
   // Display what was recovered vs lost
-  const recoveredFields = Object.keys(recovered).filter(key => recovered[key as keyof State] !== undefined);
+  const recoveredFields = Object.keys(recovered).filter(key => {
+    const val = recovered[key as keyof typeof recovered];
+    return val !== undefined;
+  });
   if (recoveredFields.length > 0) {
     warn(`Recovered fields: ${recoveredFields.join(', ')}`);
   }
@@ -535,22 +551,19 @@ export async function attemptPartialRecovery(
     return await promptCorruptRecovery(cwd);
   }
 
-  // Build complete state with recovered + defaults
+  // Build complete state with recovered + defaults (no casts needed with typed recovery)
   const completeState: State = {
     currentEpic: recovered.currentEpic ?? RECOVERY_DEFAULT_EPIC,
     lastUpdated: recovered.lastUpdated ?? new Date().toISOString(),
     workflow: {
-      // `as any` needed: recovered.workflow/stories are Record<string, unknown> | undefined
-      // Safe because we validated fields during recovery extraction above
-      mode: (recovered.workflow as any)?.mode ?? DEFAULT_WORKFLOW_MODE,
-      phase: (recovered.workflow as any)?.phase ?? DEFAULT_WORKFLOW_PHASE,
-      currentStoryIndex: (recovered.workflow as any)?.currentStoryIndex ?? 0,
-      devReviewIteration: (recovered.workflow as any)?.devReviewIteration ?? 0
+      mode: recovered.workflow?.mode ?? DEFAULT_WORKFLOW_MODE,
+      phase: recovered.workflow?.phase ?? DEFAULT_WORKFLOW_PHASE,
+      currentStoryIndex: recovered.workflow?.currentStoryIndex ?? 0,
+      devReviewIteration: recovered.workflow?.devReviewIteration ?? 0
     },
     stories: {
-      // `as any` needed: same reason as workflow - validated during extraction
-      completed: (recovered.stories as any)?.completed ?? [],
-      approvals: (recovered.stories as any)?.approvals ?? {}
+      completed: recovered.stories?.completed ?? [],
+      approvals: recovered.stories?.approvals ?? {}
     }
   };
 

@@ -608,9 +608,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - invalid currentEpic '' should use RECOVERY_DEFAULT_EPIC, other fields recovered
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe(RECOVERY_DEFAULT_EPIC);
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.workflow.phase).toBe('implementation');
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -634,9 +636,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - invalid currentEpic '   ' should use RECOVERY_DEFAULT_EPIC, other fields recovered
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe(RECOVERY_DEFAULT_EPIC);
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.workflow.phase).toBe('implementation');
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -660,9 +664,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid currentEpic recovered, invalid lastUpdated gets default timestamp
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -689,9 +695,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid stories.completed defaults to []
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.stories.completed).toEqual([]);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -718,9 +726,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid stories.completed defaults to []
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.stories.completed).toEqual([]);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -744,9 +754,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid currentStoryIndex defaults to 0
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.workflow.currentStoryIndex).toBe(0);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -770,9 +782,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid devReviewIteration defaults to 0
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.workflow.devReviewIteration).toBe(0);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -799,9 +813,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid stories.completed defaults to []
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.stories.completed).toEqual([]);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -828,9 +844,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid fields recovered, invalid stories.completed defaults to []
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.stories.completed).toEqual([]);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -854,9 +872,11 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid currentEpic recovered, invalid lastUpdated gets default timestamp
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.workflow.mode).toBe('sequential');
+        expect(loaded?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -881,9 +901,10 @@ describe('config.ts - State Management', () => {
 
       try {
         const loaded = await loadState(TEST_DIR);
-        // Partial recovery accepted - should return recovered state with defaults
+        // Partial recovery accepted - valid currentEpic recovered, invalid lastUpdated gets default timestamp
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1');
+        expect(loaded?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -2862,6 +2883,52 @@ describe('config.ts - State Management', () => {
           process.stdin.isTTY = originalIsTTY;
           consoleSpy.mockRestore();
           inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should throw MigrationSaveError when saveState fails during recovery', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: 'epic-1',
+          lastUpdated: new Date().toISOString(),
+          workflow: {
+            mode: 'sequential',
+            phase: 'implementation',
+            currentStoryIndex: 0,
+            devReviewIteration: 0
+          },
+          stories: { completed: [], approvals: {} }
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        // Mock saveState to reject with a permission error
+        const configModule = await import('./config.js');
+        const saveStateSpy = spyOn(configModule, 'saveState').mockRejectedValue(
+          new Error('EACCES: permission denied')
+        );
+
+        try {
+          await expect(attemptPartialRecovery(partialState, TEST_DIR)).rejects.toThrow(configModule.MigrationSaveError);
+
+          // Verify error message contains expected text
+          try {
+            await attemptPartialRecovery(partialState, TEST_DIR);
+          } catch (error) {
+            expect(error).toBeInstanceOf(configModule.MigrationSaveError);
+            expect((error as Error).message).toContain('Partial recovery completed but failed to save new state file');
+            if (error && typeof error === 'object' && 'recovery' in error) {
+              expect((error as any).recovery).toContain('Try: Fix disk/permissions and restart to retry recovery');
+            }
+          }
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+          saveStateSpy.mockRestore();
         }
       });
     });

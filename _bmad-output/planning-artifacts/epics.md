@@ -482,7 +482,7 @@ This epic delivers the dev-only execution mode with integrated error handling.
 
 **Given** a state file exists but has invalid JSON
 **When** `loadState()` is called
-**Then** the system displays: "[WARN] Corrupt state file detected"
+**Then** the system displays: "WARN Corrupt state file detected"
 **And** offers options: "1. Delete and start fresh  2. Exit and fix manually"
 
 **Given** a state file exists but is missing required fields
