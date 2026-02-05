@@ -338,7 +338,9 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Recovered from partial state
+        expect(loaded?.stories.completed).toEqual([]); // Default value filled
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -364,7 +366,10 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Default filled for invalid mode
+        expect(loaded?.workflow.phase).toBe('implementation'); // Valid phase recovered
+        expect(loaded?.stories.completed).toEqual([]); // Valid stories recovered
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -390,7 +395,10 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Valid mode recovered
+        expect(loaded?.workflow.phase).toBe('implementation'); // Default filled for invalid phase
+        expect(loaded?.stories.completed).toEqual([]); // Valid stories recovered
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -416,7 +424,10 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Valid mode recovered
+        expect(loaded?.workflow.phase).toBe('implementation'); // Valid phase recovered
+        expect(loaded?.stories.completed).toEqual([]); // Default filled for invalid completed array
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -442,7 +453,10 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Valid mode recovered
+        expect(loaded?.workflow.currentStoryIndex).toBe(0); // Default filled for invalid index
+        expect(loaded?.workflow.devReviewIteration).toBe(0); // Default for invalid devReviewIteration
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -473,7 +487,9 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Valid mode recovered
+        expect(loaded?.stories.approvals).toEqual({}); // Default filled for invalid approvals
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -534,7 +550,10 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Default filled for invalid workflow (array)
+        expect(loaded?.workflow.phase).toBe('implementation'); // Default filled
+        expect(loaded?.stories.completed).toEqual([]); // Valid stories recovered
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -563,7 +582,9 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
         // Partial recovery accepted - should return recovered state with defaults
         expect(loaded).not.toBeNull();
-        expect(loaded?.currentEpic).toBeDefined();
+        expect(loaded?.currentEpic).toBe('epic-1'); // Specific value verification
+        expect(loaded?.workflow.mode).toBe('sequential'); // Valid mode recovered
+        expect(loaded?.stories.approvals).toEqual({}); // Default filled for invalid approvals (array)
       } finally {
         process.stdin.isTTY = originalIsTTY;
         inquirerSpy.mockRestore();
@@ -2468,6 +2489,10 @@ describe('config.ts - State Management', () => {
           // Verify warn() was called (it logs to console.log internally)
           // The warn() function from logger.js calls console.log with formatted messages
           expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+
+          // Verify the actual corrupt state message appears in output
+          const allOutput = consoleSpy.mock.calls.map(call => call.join(' ')).join('\n');
+          expect(allOutput).toContain('Corrupt state file detected');
         } finally {
           process.stdin.isTTY = originalIsTTY;
           consoleSpy.mockRestore();
@@ -2657,6 +2682,43 @@ describe('config.ts - State Management', () => {
           expect(result).not.toBeNull();
           expect(result?.currentEpic).toBe('epic-1');
           expect(result?.workflow.mode).toBe('sequential'); // Filled with default
+        } finally {
+          process.stdin.isTTY = originalIsTTY;
+          consoleSpy.mockRestore();
+          inquirerSpy.mockRestore();
+        }
+      });
+
+      test('should use RECOVERY_DEFAULT_EPIC when currentEpic is invalid but other fields are valid', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        process.stdin.isTTY = true;
+
+        const partialState = {
+          currentEpic: '../../etc/passwd', // Invalid epic (path traversal attempt)
+          lastUpdated: new Date().toISOString(),
+          workflow: {
+            mode: 'batch',
+            phase: 'review',
+            currentStoryIndex: 2,
+            devReviewIteration: 1
+          },
+          stories: { completed: ['story-1'], approvals: {} }
+        };
+
+        const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+
+        try {
+          const result = await attemptPartialRecovery(partialState, TEST_DIR);
+
+          expect(result).not.toBeNull();
+          // Invalid currentEpic should be replaced with RECOVERY_DEFAULT_EPIC
+          expect(result?.currentEpic).toBe(RECOVERY_DEFAULT_EPIC);
+          // Other valid fields should be recovered
+          expect(result?.workflow.mode).toBe('batch');
+          expect(result?.workflow.phase).toBe('review');
+          expect(result?.workflow.currentStoryIndex).toBe(2);
+          expect(result?.stories.completed).toEqual(['story-1']);
         } finally {
           process.stdin.isTTY = originalIsTTY;
           consoleSpy.mockRestore();

@@ -110,6 +110,24 @@ So that I can continue working without manual file editing.
 - [x] [AI-Review][LOW] Completion Notes test counts are confusing across 4 resolution sections - mix "Story 1.4 tests" (19) with "total project tests" (148→190→191) at different timestamps. Consider consolidating to final accurate count only.
 - [x] [AI-Review][LOW] Pre-existing TypeScript errors in `src/agents/reviewer.ts:51` and `src/utils/user-input.test.ts:12,22,32` persist. Not from Story 1.4 but worth tracking as tech debt.
 
+### Review Follow-ups Round 5 (AI)
+
+- [x] [AI-Review][MEDIUM] `attemptPartialRecovery()` does not defensively copy recovered `stories.completed` array [config.ts:468] or `stories.approvals` object [config.ts:475]. Both are stored by reference from parsed input. `migrateV0toV1()` defensively copies with spread (`[...legacyState.completedStories]`) but recovery doesn't follow the same pattern. Add `[...stories.completed]` and `{...approvals}` spread copies to prevent potential downstream mutation.
+- [x] [AI-Review][MEDIUM] Test "should display WARN corrupt state message" [config.test.ts:2458-2476] only asserts `consoleSpy.mock.calls.length > 0` without verifying the actual "Corrupt state file detected" string appears in output. The Round 3 fix improved the "recovered vs lost fields" test [config.test.ts:2718-2720] with specific string assertions. Apply same pattern here: assert `allOutput.toContain('Corrupt state file detected')`.
+- [x] [AI-Review][MEDIUM] `status as string` cast in `attemptPartialRecovery()` approvals validation [config.ts:473] is technically unsafe when status is non-string (null/undefined). `Object.values(approvals).every()` passes the raw value to `.includes()` with an `as string` cast that bypasses type checking. Add explicit `typeof status === 'string'` guard before the `.includes()` check for type safety.
+- [x] [AI-Review][LOW] Epics source document `_bmad-output/planning-artifacts/epics.md:485` still references `"[WARN] Corrupt state file detected"` with brackets. Story AC #1 was updated (Round 3) to match logger format without brackets, but planning artifact is drifted. Track as tech debt for next planning artifact review.
+- [x] [AI-Review][LOW] `promptCorruptRecovery()` return type `Promise<null>` [config.ts:612] is valid but semantically unusual. Function always returns null or throws. Consider if `Promise<void>` with callers using separate null path would be clearer. Not blocking - matches existing `promptMigration()` return-value pattern.
+- [x] [AI-Review][LOW] `access` import used inconsistently in config.test.ts for file existence checks. Some tests use `access(path)` pattern while others use `readFile` to check existence. Minor style inconsistency across test file - consider standardizing in future cleanup.
+
+### Review Follow-ups Round 6 (AI)
+
+- [x] [AI-Review][MEDIUM] `RECOVERY_DEFAULT_EPIC` constant is imported [config.test.ts:6] but never asserted in any test. No test exercises the path where `currentEpic` is missing/invalid but other fields (workflow or stories) ARE recoverable. Need a test with invalid currentEpic (e.g., `'../../etc/passwd'`), valid workflow fields, user accepts recovery, and asserts `result?.currentEpic === RECOVERY_DEFAULT_EPIC`. Without this, a regression changing the constant to an invalid pattern (e.g., `'../unknown'`) would go undetected.
+- [x] [AI-Review][MEDIUM] 19 partial recovery integration tests in "Invalid State Structure (with partial recovery)" [config.test.ts:289-870] use weak assertions (`expect(loaded?.currentEpic).toBeDefined()`) that pass for any truthy value including garbage. At minimum, strengthen 5-10 key tests to assert specific expected values (e.g., `.toBe('epic-1')`, `.toBe('sequential')`, `.toEqual([])`) to verify correct field recovery vs default filling. Compare with the stronger test at config.test.ts:509 as the model pattern.
+- [x] [AI-Review][MEDIUM] Round 5 review resolution changes (9 lines: defensive copies, type safety guard, test assertion enhancement) remain uncommitted across config.ts and config.test.ts. Must commit with story completion to avoid losing these fixes.
+- [x] [AI-Review][LOW] Pre-existing `consoleSpy = spyOn(console, 'log')` pattern in 3 describe blocks [config.test.ts:194,292,970] suppresses ALL console.log, not just warn()/debug(). Story 1.4 continues this pattern. Track as tech debt for future test cleanup.
+- [x] [AI-Review][LOW] Pre-existing TypeScript errors persist in `src/agents/reviewer.ts:51` (TS18047) and `src/utils/user-input.test.ts:12,22,32` (TS2739). Not from Story 1.4. Tracked since Round 4.
+- [x] [AI-Review][LOW] Story Completion Notes span 5 resolution sections with evolving test counts creating confusing narrative. Consider consolidating to final accurate status in future stories.
+
 ## Dev Notes
 
 ### Architecture Compliance
@@ -511,12 +529,80 @@ N/A - no debugging required, implementation proceeded smoothly following TDD app
 - Zero TypeScript errors introduced by Story 1.4
 - Ready for final validation and completion
 
+#### Code Review Round 5 Resolution (2026-02-05)
+
+**All 6 Round 5 Review Follow-ups Resolved**: Fixed defensive copying, type safety, and test assertion quality issues.
+
+**Medium Priority Fixes (3 items):**
+1. ✅ **Added Defensive Copying**: Updated `attemptPartialRecovery()` to defensively copy `stories.completed` array with `[...stories.completed]` [config.ts:468] and `stories.approvals` object with `{...approvals}` [config.ts:475] to prevent downstream mutation, matching the pattern used in `migrateV0toV1()`.
+
+2. ✅ **Enhanced Test Assertion**: Improved test "should display WARN corrupt state message" [config.test.ts:2458-2476] to verify the actual "Corrupt state file detected" string appears in output using `allOutput.toContain('Corrupt state file detected')` pattern from Round 3 fix.
+
+3. ✅ **Added Type Safety Guard**: Enhanced `attemptPartialRecovery()` approvals validation [config.ts:473] to explicitly check `typeof status === 'string'` before calling `.includes()`, eliminating unsafe `as string` cast and preventing issues with null/undefined values.
+
+**Low Priority Items (3 items):**
+4. ✅ **Epics Document Tech Debt**: Noted that `_bmad-output/planning-artifacts/epics.md:485` still uses bracket format `"[WARN]"` while implementation uses `"WARN"`. Tracked as tech debt for next planning artifact review - not blocking story completion.
+
+5. ✅ **Return Type Pattern**: Acknowledged that `promptCorruptRecovery()` return type `Promise<null>` [config.ts:612] is semantically unusual but intentionally matches existing `promptMigration()` pattern. Considered design choice, not a bug.
+
+6. ✅ **Test Style Inconsistency**: Noted `access` import usage inconsistency in config.test.ts (some tests use `access()`, others use `readFile()` for file existence checks). Minor style issue - tracked for future cleanup, not blocking.
+
+**Final Status:**
+- All 191 tests passing, 0 failing
+- All review findings from Rounds 1-5 addressed
+- Type safety improved with explicit string guard
+- Test quality improved with specific string assertions
+- Defensive copying prevents mutation issues
+- All changes verified with test suite
+- **Story 1.4 COMPLETE and ready for final review**
+
+**Summary of Round 5 Changes:**
+- Added `[...stories.completed]` spread for defensive copy [config.ts:468]
+- Added `{...approvals}` spread for defensive copy [config.ts:475]
+- Added `typeof status === 'string'` type guard [config.ts:473]
+- Enhanced test assertion to verify "Corrupt state file detected" string [config.test.ts:2470-2472]
+- Documented remaining tech debt items (epics.md format drift, test style inconsistency)
+
+#### Code Review Round 6 Resolution (2026-02-05)
+
+**All 6 Round 6 Review Follow-ups Resolved**: Addressed test coverage gaps and quality improvements.
+
+**Medium Priority Fixes (3 items):**
+1. ✅ **Added RECOVERY_DEFAULT_EPIC Test**: Created new test "should use RECOVERY_DEFAULT_EPIC when currentEpic is invalid but other fields are valid" [config.test.ts:2671-2702] that validates the constant is used when currentEpic contains path traversal attempt (`'../../etc/passwd'`) while other fields are valid. Prevents regression if constant changes to invalid pattern.
+
+2. ✅ **Strengthened 8 Partial Recovery Tests**: Enhanced assertions in key tests [config.test.ts:322-586] from weak `.toBeDefined()` to specific value checks:
+   - Test "missing stories object" now asserts `.toBe('epic-1')`, `.toBe('sequential')`, `.toEqual([])`
+   - Test "invalid workflow.mode" now asserts specific recovered values + defaults
+   - Test "invalid workflow.phase" now asserts mode recovery + phase default
+   - Test "invalid stories.completed" now asserts all recovered fields
+   - Test "invalid currentStoryIndex" now asserts specific defaults
+   - Test "invalid approvals status" now asserts default empty object
+   - Test "workflow array instead of object" now asserts all defaults filled
+   - Test "approvals array instead of object" now asserts specific recoveries
+   - Total: 21 additional specific assertions prevent silent regressions
+
+3. ✅ **Round 5 Changes Already Present**: Verified defensive copies [config.ts:468,477] and type guard [config.ts:473] from Round 5 are already in the codebase. Will be committed with Round 6 changes.
+
+**Low Priority Items (3 items):**
+4. ✅ **Console Spy Pattern Noted**: Documented as pre-existing tech debt. Not blocking Story 1.4 completion. Pattern affects 3 describe blocks but doesn't impact test reliability.
+
+5. ✅ **TypeScript Errors Acknowledged**: Pre-existing errors in `reviewer.ts:51` and `user-input.test.ts:12,22,32` tracked as tech debt since Round 4. Not introduced by Story 1.4.
+
+6. ✅ **Completion Notes Consolidated**: This Round 6 Resolution section provides final accurate status. Previous sections show evolution but this is authoritative.
+
+**Final Status:**
+- **Total tests: 192 passing, 0 failing** (added 1 new test in Round 6)
+- **Story 1.4 tests: 20 tests** (19 from initial implementation + 1 RECOVERY_DEFAULT_EPIC test)
+- All Round 1-6 review findings addressed
+- Test quality significantly improved with specific assertions
+- Ready for final completion
+
 ### File List
 
 #### Modified Files
-- `src/config.ts` - Added corrupt state detection, recovery prompts, and partial recovery logic; refactored to use ?? consistently (Round 3)
-- `src/config.test.ts` - Fixed 24 broken tests with TTY+inquirer mocking, updated test expectations for partial recovery flow, moved Story 1.4 exports to static import (Round 2), enhanced test assertions for recovery messages (Round 3)
+- `src/config.ts` - Added corrupt state detection, recovery prompts, and partial recovery logic; refactored to use ?? consistently (Round 3); added defensive copying and type safety guard (Round 5)
+- `src/config.test.ts` - Fixed 24 broken tests with TTY+inquirer mocking, updated test expectations for partial recovery flow, moved Story 1.4 exports to static import (Round 2), enhanced test assertions for recovery messages (Rounds 3,5), added RECOVERY_DEFAULT_EPIC test and strengthened 8 partial recovery tests with specific assertions (Round 6)
 - `src/index.ts` - Added CorruptStateError to error routing condition and import (Round 2)
 - `src/index.test.ts` - Added test for CorruptStateError formatting behavior (Round 2)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` - Story status updated to review
-- `_bmad-output/implementation-artifacts/1-4-implement-corrupt-state-detection-and-recovery.md` - Updated completion notes, test counts, Dev Notes, AC wording, and File List (Rounds 2-3)
+- `_bmad-output/implementation-artifacts/1-4-implement-corrupt-state-detection-and-recovery.md` - Updated completion notes, test counts, Dev Notes, AC wording, File List, and Round 6 resolution (Rounds 2-6)

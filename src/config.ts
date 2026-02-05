@@ -465,14 +465,16 @@ export async function attemptPartialRecovery(
     const partialStories: Record<string, unknown> = {};
 
     if (Array.isArray(stories.completed) && stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) {
-      partialStories.completed = stories.completed;
+      partialStories.completed = [...stories.completed]; // Defensive copy to prevent downstream mutation
     }
     if (stories.approvals && typeof stories.approvals === 'object' && !Array.isArray(stories.approvals)) {
       const approvals = stories.approvals as Record<string, unknown>;
       const validStatuses = ['approved', 'needs-changes', 'pending'];
-      const allValid = Object.values(approvals).every((status: unknown) => validStatuses.includes(status as string));
+      const allValid = Object.values(approvals).every((status: unknown) =>
+        typeof status === 'string' && validStatuses.includes(status)
+      );
       if (allValid) {
-        partialStories.approvals = approvals;
+        partialStories.approvals = { ...approvals }; // Defensive copy to prevent downstream mutation
       }
     }
 
