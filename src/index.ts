@@ -104,8 +104,8 @@ Options:
   --verbose, -v             Enable verbose/debug output
   --max-iterations, -m N    Max dev-review cycles per story (default: 10)
   --yolo, -y                Auto-complete stories when max iterations reached
-  --batch, -b               Run in batch mode (create and review all stories, no implementation)
-  --dev-only, -d            Run in dev-only mode (skip story creation, implement existing stories)
+  --batch, -b               Create all stories first, review each one, then exit (no implementation)
+  --dev-only, -d            Skip story creation, implement existing stories only
   --help, -h                Show this help message
 
 Description:
@@ -129,12 +129,15 @@ Requirements:
   - Git repository (optional, for commits)
 
 Examples:
-  npx johnny-bmad              # Start fresh or prompt to resume
+  npx johnny-bmad              # Start sequential workflow (default)
   npx johnny-bmad --resume     # Auto-resume from last session
   npx johnny-bmad -v           # Verbose output for debugging
   npx johnny-bmad -m 5         # Limit to 5 dev-review cycles per story
-  npx johnny-bmad --batch      # Create and review all stories, no implementation
-  npx johnny-bmad --dev-only   # Skip story creation, implement existing stories
+  npx johnny-bmad --batch      # Create and review stories before implementing
+  npx johnny-bmad --dev-only   # Implement pre-created stories
+  npx johnny-bmad --batch --yolo   # Create stories without review prompts
+
+Documentation: https://github.com/webeleon/johnny-bmad
 `);
 }
 

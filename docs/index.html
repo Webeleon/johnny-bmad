@@ -598,12 +598,12 @@ johnny-bmad</code></pre>
                 <tr>
                     <td><code>--batch</code></td>
                     <td><code>-b</code></td>
-                    <td>Run in batch mode (create and review all stories, no implementation)</td>
+                    <td>Create all stories first, review each one, then exit (no implementation)</td>
                 </tr>
                 <tr>
                     <td><code>--dev-only</code></td>
                     <td><code>-d</code></td>
-                    <td>Run in dev-only mode (skip story creation, implement existing stories)</td>
+                    <td>Skip story creation, implement existing stories only</td>
                 </tr>
                 <tr>
                     <td><code>--help</code></td>
@@ -614,14 +614,15 @@ johnny-bmad</code></pre>
         </table>
 
         <h3>Examples</h3>
-        <pre><code>johnny-bmad                 # Start fresh or prompt to resume
+        <pre><code>johnny-bmad                 # Start sequential workflow (default)
 johnny-bmad --resume        # Auto-resume from last session
 johnny-bmad -v              # Verbose output for debugging
-johnny-bmad -m 5            # Limit to 5 dev-review cycles
+johnny-bmad -m 5            # Limit to 5 dev-review cycles per story
 johnny-bmad --yolo          # YOLO mode: auto-mark done at max iterations
 johnny-bmad -m 3 -y         # 3 iterations max, auto-complete if stuck
-johnny-bmad --batch         # Create and review all stories, no implementation
-johnny-bmad --dev-only      # Skip story creation, implement existing stories</code></pre>
+johnny-bmad --batch         # Create and review stories before implementing
+johnny-bmad --dev-only      # Implement pre-created stories
+johnny-bmad --batch --yolo  # Create stories without review prompts</code></pre>
 
         <h2>Requirements</h2>
         <ul class="requirements-list">

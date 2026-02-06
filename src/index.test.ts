@@ -261,7 +261,7 @@ describe('index.ts - Argument Parsing', () => {
         // Verify --batch flag is documented
         expect(helpOutput).toContain('--batch');
         expect(helpOutput).toContain('-b');
-        expect(helpOutput).toContain('batch mode');
+        expect(helpOutput).toContain('Create all stories first, review each one, then exit');
       } finally {
         consoleSpy.mockRestore();
       }
@@ -277,7 +277,7 @@ describe('index.ts - Argument Parsing', () => {
         // Verify --dev-only flag is documented
         expect(helpOutput).toContain('--dev-only');
         expect(helpOutput).toContain('-d');
-        expect(helpOutput).toContain('dev-only mode');
+        expect(helpOutput).toContain('Skip story creation, implement existing stories only');
       } finally {
         consoleSpy.mockRestore();
       }
@@ -293,6 +293,70 @@ describe('index.ts - Argument Parsing', () => {
         // Verify examples section includes new flags
         expect(helpOutput).toContain('npx johnny-bmad --batch');
         expect(helpOutput).toContain('npx johnny-bmad --dev-only');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should include --batch --yolo example in help text', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify --batch --yolo example is included
+        expect(helpOutput).toContain('npx johnny-bmad --batch --yolo');
+        expect(helpOutput).toContain('Create stories without review prompts');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should include documentation link in help text', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify documentation link is included
+        expect(helpOutput).toContain('Documentation: https://github.com/webeleon/johnny-bmad');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should include "Start sequential workflow (default)" in examples', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify default workflow example comment
+        expect(helpOutput).toContain('Start sequential workflow (default)');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should preserve existing flag descriptions', () => {
+      const consoleSpy = spyOn(console, 'log');
+      try {
+        showHelp();
+
+        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+
+        // Verify existing flags are preserved
+        expect(helpOutput).toContain('--resume');
+        expect(helpOutput).toContain('Auto-resume from saved state without prompting');
+        expect(helpOutput).toContain('--verbose');
+        expect(helpOutput).toContain('Enable verbose/debug output');
+        expect(helpOutput).toContain('--yolo');
+        expect(helpOutput).toContain('Auto-complete stories when max iterations reached');
+        expect(helpOutput).toContain('--max-iterations');
+        expect(helpOutput).toContain('Max dev-review cycles per story');
       } finally {
         consoleSpy.mockRestore();
       }

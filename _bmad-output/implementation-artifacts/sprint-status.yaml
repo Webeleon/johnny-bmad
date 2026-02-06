@@ -12,9 +12,9 @@ development_status:
   epic-1-retrospective: optional
   epic-2: in-progress
   2-1-add-batch-and-dev-only-flag-parsing: done
-  2-2-implement-flag-validation-mutually-exclusive-check: review
-  2-3-implement-workflow-mode-determination: backlog
-  2-4-update-help-text-with-new-flags-and-examples: backlog
+  2-2-implement-flag-validation-mutually-exclusive-check: done
+  2-3-implement-workflow-mode-determination: done
+  2-4-update-help-text-with-new-flags-and-examples: review
   epic-2-retrospective: optional
   epic-3: backlog
   3-1-create-ui-component-directory-structure-and-index: backlog
