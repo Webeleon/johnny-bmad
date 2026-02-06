@@ -28,10 +28,23 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
     // Determine if we need labeled output for verbose mode
     const useLabeled = isVerbose() && opts.agentRole;
 
+    // Use 'pipe' for stdin so the child cannot put the terminal in raw mode
+    // (which would swallow Ctrl+C). The -p flag + --allowedTools make stdin unnecessary.
     const proc = spawn('claude', args, {
       cwd: opts.cwd,
-      stdio: useLabeled ? ['inherit', 'pipe', 'pipe'] : 'inherit'
+      stdio: useLabeled ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'inherit', 'inherit']
     });
+
+    // Close stdin immediately - child doesn't need it in -p mode
+    proc.stdin?.end();
+
+    // On Ctrl+C: kill child and exit parent immediately
+    const onSignal = (signal: NodeJS.Signals) => {
+      proc.kill(signal);
+      process.exit(130);
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
 
     // In verbose mode, pipe through labeled streams
     if (useLabeled && proc.stdout && proc.stderr) {
@@ -41,8 +54,13 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
       proc.stderr.pipe(stderrStream);
     }
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
+      // Clean up signal handlers
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
+
       const durationMs = Date.now() - startTime;
+
       if (code !== 0) {
         // Log failure
         if (opts.agentRole) {
@@ -59,6 +77,8 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
     });
 
     proc.on('error', (err) => {
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
       reject(err);
     });
   });

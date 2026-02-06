@@ -31,14 +31,27 @@ export function runReviewAgent(
 
     const verbose = isVerbose();
 
+    // Use 'pipe' for stdin so the child cannot put the terminal in raw mode
+    // (which would swallow Ctrl+C). The -p flag + --allowedTools make stdin unnecessary.
     const proc = spawn(
       'claude',
       ['--model', 'opus', '-p', prompt, '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep'],
       {
         cwd,
-        stdio: ['inherit', 'pipe', verbose ? 'pipe' : 'inherit']
+        stdio: ['pipe', 'pipe', verbose ? 'pipe' : 'inherit']
       }
     );
+
+    // Close stdin immediately - child doesn't need it in -p mode
+    proc.stdin?.end();
+
+    // On Ctrl+C: kill child and exit parent immediately
+    const onSignal = (signal: NodeJS.Signals) => {
+      proc.kill(signal);
+      process.exit(130);
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
 
     // In verbose mode, pipe stderr through labeled stream
     if (verbose && proc.stderr) {
@@ -68,7 +81,11 @@ export function runReviewAgent(
       }
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
+      // Clean up signal handlers
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
+
       const durationMs = Date.now() - startTime;
 
       if (code !== 0) {
@@ -118,6 +135,8 @@ export function runReviewAgent(
     });
 
     proc.on('error', (err) => {
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
       reject(err);
     });
   });
