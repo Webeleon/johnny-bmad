@@ -1,6 +1,6 @@
 # Story 2.4: Update Help Text with New Flags and Examples
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -288,5 +288,6 @@ N/A - Story was already implemented in a previous session
 
 ## Change Log
 
+- 2026-02-06: Story verified complete via dev-story workflow - All acceptance criteria satisfied, 241 tests passing (up from 237 baseline), TypeScript compilation successful, documentation synchronized across all files
 - 2026-02-06: Story implementation completed - Updated help text in src/index.ts, synchronized docs/index.html examples, all 241 tests passing
 - 2026-02-06: Project rebuilt (`bun run build`) to ensure dist/index.js reflects all help text changes; verified all acceptance criteria satisfied in built output
