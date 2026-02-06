@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { CliArgs, Epic, State } from './types.js';
+import type { CliArgs, Epic, State, WorkflowMode } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
 import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, getEpicsFromSprintStatus, updateSprintStatus, markEpicComplete } from './utils/files.js';
 import { selectEpic, confirmResume, handleMaxIterations, confirmAction, confirmContinueNextEpic } from './utils/user-input.js';
@@ -12,6 +12,20 @@ import { commitStoryChanges, isGitRepo } from './git/commit.js';
 import { info, error, success, warn, header, step, setVerbose, successWithTiming } from './utils/logger.js';
 import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
 
+/**
+ * Determine workflow mode based on CLI arguments
+ *
+ * @internal Exported for testing only
+ * @param args - Parsed CLI arguments
+ * @returns Workflow mode (batch, dev-only, or sequential)
+ */
+export function determineMode(args: CliArgs): WorkflowMode {
+  // Note: Mutual exclusion of batch and devOnly is validated upstream in validateFlags()
+  // at src/index.ts:84-90 before runOrchestrator() is called
+  if (args.batch) return 'batch';
+  if (args.devOnly) return 'dev-only';
+  return 'sequential';
+}
 
 export async function runOrchestrator(args: CliArgs): Promise<void> {
   const cwd = process.cwd();
@@ -57,6 +71,12 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
   successWithTiming('Pre-flight checks passed');
 
+  // Determine workflow mode from CLI flags
+  // This value is used when creating fresh state (Priority 2 and 3 below)
+  // Resume path (Priority 1) uses state.workflow.mode from loaded state instead
+  // Called here (rather than inside Priority 2/3 blocks) to avoid duplication and keep logic simple
+  const mode = determineMode(args);
+
   // Main epic loop - continues until no more work available
   let continueProcessing = true;
 
@@ -72,6 +92,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     // Priority 1: Resume from johnny-bmad state (in-progress session)
     if (state) {
       selectedEpicId = state.currentEpic;
+      info(`Resuming in ${state.workflow.mode} mode...`);
       success(`Resuming ongoing session: ${state.currentEpic}`);
       info(`Story index: ${state.workflow.currentStoryIndex}, Completed: ${state.stories.completed.length}`);
       autoStarted = true;
@@ -86,6 +107,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         selectedEpicId = ongoingWork.epicId;
         ongoingStories = ongoingWork.stories;
         state = createInitialState(selectedEpicId);
+        state.workflow.mode = mode;
         // NOTE: state.stories.approvals will be populated in future stories (batch/dev-only workflow modes)
         // Currently in sequential mode, approvals are not tracked
 
@@ -134,6 +156,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       }
       selectedEpicId = selectedEpicFromPrompt.id;
       state = createInitialState(selectedEpicId);
+      state.workflow.mode = mode;
       // NOTE: state.stories.approvals will be populated in future stories (batch/dev-only workflow modes)
       // Currently in sequential mode, approvals are not tracked
     }
@@ -182,6 +205,20 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     info(`Selected epic: ${selectedEpic.id} - ${selectedEpic.title}`);
     info(`Stories to implement: ${selectedEpic.stories.length}`);
 
+    // Route to appropriate workflow based on mode (use state mode for resume, CLI mode for fresh start)
+    const activeMode = state!.workflow.mode;
+
+    if (activeMode === 'batch') {
+      warn('Batch workflow not yet implemented');
+      warn('        Try: Run without --batch flag for default sequential mode');
+      return;
+    } else if (activeMode === 'dev-only') {
+      warn('Dev-only workflow not yet implemented');
+      warn('        Try: Run without --dev-only flag for default sequential mode');
+      return;
+    }
+
+    // Sequential mode (default) - existing story loop code continues below
     // Step 3: Story Loop
     step(3, 4, 'Processing stories in epic');
 
