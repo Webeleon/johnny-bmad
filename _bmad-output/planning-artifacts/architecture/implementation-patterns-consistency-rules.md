@@ -225,6 +225,8 @@ src/
         Try: {exact_recovery_command}
 ```
 
+**Exemption:** CLI argument validation errors may omit the `{error_type}:` colon-separated pattern when the AC specification requires exact error message text (e.g., `[ERROR] Cannot use --batch and --dev-only together` per Story 2.2 AC#1). _Added per Story 2.2._
+
 **Examples:**
 ```
 ✅ [ERROR] Claude CLI not found

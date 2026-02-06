@@ -1,5 +1,5 @@
 import { describe, test, expect, spyOn } from 'bun:test';
-import { formatErrorWithRecovery, parseArgs, showHelp, main } from './index.js';
+import { formatErrorWithRecovery, parseArgs, showHelp, main, validateFlags } from './index.js';
 import { StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 
 describe('index.ts - Error Handling', () => {
@@ -299,6 +299,144 @@ describe('index.ts - Argument Parsing', () => {
     });
   });
 
+  describe('validateFlags()', () => {
+    test('should exit with error when --batch and --dev-only used together', () => {
+      const errorSpy = spyOn(console, 'error');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      try {
+        expect(() => validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true }))
+          .toThrow('process.exit called');
+
+        expect(exitSpy).toHaveBeenCalledWith(1);
+
+        // Verify error message
+        const errorCalls = errorSpy.mock.calls.flat().join('\n');
+        expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
+        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should exit with error when -b and -d short flags used together (integration)', () => {
+      const errorSpy = spyOn(console, 'error');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      try {
+        const args = parseArgs(['-b', '-d']);
+        expect(() => validateFlags(args)).toThrow('process.exit called');
+
+        expect(exitSpy).toHaveBeenCalledWith(1);
+
+        const errorCalls = errorSpy.mock.calls.flat().join('\n');
+        expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should not exit when only --batch is set', () => {
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
+      try {
+        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: false });
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should not exit when only --dev-only is set', () => {
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
+      try {
+        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: true });
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should not exit when --batch and --yolo are used together', () => {
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
+      try {
+        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: false });
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should not exit when --dev-only and --yolo are used together', () => {
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
+      try {
+        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: false, devOnly: true });
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should not exit when no flags are set (default/sequential path)', () => {
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
+      try {
+        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: false });
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should exit with error when all flags --batch --dev-only --yolo used together', () => {
+      const errorSpy = spyOn(console, 'error');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      try {
+        expect(() => {
+          validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: true });
+        }).toThrow('process.exit called');
+
+        // Mutual exclusion takes priority over yolo
+        expect(exitSpy).toHaveBeenCalledWith(1);
+
+        const errorCalls = errorSpy.mock.calls.flat().join('\n');
+        expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('should match exact error message format from AC#1 with 8-space indentation', () => {
+      const errorSpy = spyOn(console, 'error');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      try {
+        expect(() => {
+          validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true });
+        }).toThrow('process.exit called');
+
+        // Verify exact message strings including whitespace formatting
+        const errorCalls = errorSpy.mock.calls;
+        expect(errorCalls.length).toBe(2);
+        expect(errorCalls[0][0]).toBe('[ERROR] Cannot use --batch and --dev-only together');
+        expect(errorCalls[1][0]).toBe('        Try: Use --batch to create stories, then --dev-only to implement');
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+  });
+
   describe('main() - Integration', () => {
     test('should display help and exit when --help flag is passed', async () => {
       const consoleSpy = spyOn(console, 'log');
@@ -324,6 +462,67 @@ describe('index.ts - Argument Parsing', () => {
         expect(exitSpy).toHaveBeenCalledWith(0);
       } finally {
         consoleSpy.mockRestore();
+        exitSpy.mockRestore();
+        process.argv = originalArgv;
+      }
+    });
+
+    test('should exit with error when --batch and --dev-only flags are both passed', async () => {
+      const errorSpy = spyOn(console, 'error');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+      const originalArgv = process.argv;
+
+      try {
+        // Set argv to simulate --batch --dev-only flags
+        process.argv = ['node', 'index.js', '--batch', '--dev-only'];
+
+        // main() should call validateFlags() which calls process.exit(1)
+        await expect(main()).rejects.toThrow('process.exit called');
+
+        // Verify error message was displayed
+        const errorCalls = errorSpy.mock.calls.flat().join('\n');
+        expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
+        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+
+        // Verify process.exit(1) was called
+        expect(exitSpy).toHaveBeenCalledWith(1);
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+        process.argv = originalArgv;
+      }
+    });
+
+    test('should show error before help when --batch --dev-only --help flags are all passed', async () => {
+      const errorSpy = spyOn(console, 'error');
+      const logSpy = spyOn(console, 'log');
+      const exitSpy = spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+      const originalArgv = process.argv;
+
+      try {
+        // Set argv to simulate --batch --dev-only --help flags
+        process.argv = ['node', 'index.js', '--batch', '--dev-only', '--help'];
+
+        // main() should call validateFlags() which calls process.exit(1) BEFORE help display
+        await expect(main()).rejects.toThrow('process.exit called');
+
+        // Verify error message was displayed (not help text)
+        const errorCalls = errorSpy.mock.calls.flat().join('\n');
+        expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
+        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+
+        // Verify help text was NOT displayed (console.log should not have been called)
+        expect(logSpy).not.toHaveBeenCalled();
+
+        // Verify process.exit(1) was called (error exit, not help exit)
+        expect(exitSpy).toHaveBeenCalledWith(1);
+      } finally {
+        errorSpy.mockRestore();
+        logSpy.mockRestore();
         exitSpy.mockRestore();
         process.argv = originalArgv;
       }

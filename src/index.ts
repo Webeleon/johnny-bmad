@@ -78,6 +78,18 @@ export function parseArgs(argv: string[]): CliArgs {
 }
 
 /**
+ * Validate flag combinations for mutual exclusivity
+ * @internal Exported for testing only
+ */
+export function validateFlags(args: CliArgs): void {
+  if (args.batch && args.devOnly) {
+    console.error('[ERROR] Cannot use --batch and --dev-only together');
+    console.error('        Try: Use --batch to create stories, then --dev-only to implement');
+    process.exit(1);
+  }
+}
+
+/**
  * Display help text with usage information
  * @internal Exported for testing only
  */
@@ -174,6 +186,9 @@ export function formatErrorWithRecovery(err: unknown): { message: string; recove
  */
 export async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  // Validate flag combinations before any other processing
+  validateFlags(args);
 
   if (args.help) {
     showHelp();

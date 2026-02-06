@@ -11,8 +11,8 @@ development_status:
   1-4-implement-corrupt-state-detection-and-recovery: done
   epic-1-retrospective: optional
   epic-2: in-progress
-  2-1-add-batch-and-dev-only-flag-parsing: in-progress
-  2-2-implement-flag-validation-mutually-exclusive-check: backlog
+  2-1-add-batch-and-dev-only-flag-parsing: done
+  2-2-implement-flag-validation-mutually-exclusive-check: review
   2-3-implement-workflow-mode-determination: backlog
   2-4-update-help-text-with-new-flags-and-examples: backlog
   epic-2-retrospective: optional
