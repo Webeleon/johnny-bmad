@@ -16,7 +16,7 @@ development_status:
   2-3-implement-workflow-mode-determination: done
   2-4-update-help-text-with-new-flags-and-examples: done
   epic-2-retrospective: optional
-  epic-3: backlog
+  epic-3: in-progress
   3-1-create-ui-component-directory-structure-and-index: backlog
   3-2-implement-ascii-banner-component: backlog
   3-3-implement-phase-header-component: backlog
