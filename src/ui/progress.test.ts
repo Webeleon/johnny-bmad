@@ -1,9 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import chalk from 'chalk';
 import { displayProgress } from './progress.js';
-
-// CRITICAL: This test file implements AC requirements from Story 3.4
-// The suffix '...' is controlled by current >= total, NOT by status string
-// See AC #3: "trailing ... is NOT appended when current >= total (completion state)"
 
 describe('progress.ts - Progress Bar', () => {
   let consoleOutput: string[];
@@ -158,6 +155,37 @@ describe('progress.ts - Progress Bar', () => {
       expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
       // Status with no dots since 2 >= -5 is true
       expect(output).not.toContain('broken...');
+    });
+
+    test('should apply cyan color styling via chalk.cyan()', () => {
+      // Force chalk to use color level 3 (truecolor) by setting chalk instance level
+      // This ensures ANSI codes are included in output even during testing
+      const originalLevel = chalk.level;
+      chalk.level = 3;
+
+      // Capture raw console.log args to preserve ANSI codes
+      let rawArg: unknown;
+      const tempLog = console.log;
+      console.log = (arg: unknown) => {
+        rawArg = arg;
+        tempLog(arg);
+      };
+
+      displayProgress(4, 8, 'implementing');
+
+      console.log = tempLog;
+      chalk.level = originalLevel; // Restore
+
+      // Convert to string (preserves ANSI codes when chalk.level=3)
+      const rawString = String(rawArg);
+
+      // Verify ANSI cyan escape code (\x1b[36m) is present in raw output
+      // This proves chalk.cyan() wrapper is actually applied at progress.ts:22
+      expect(rawString).toContain('\x1b[36m');
+
+      // Also verify expected content
+      expect(rawString).toContain('Story 4/8');
+      expect(rawString).toContain('implementing...');
     });
   });
 });
