@@ -187,5 +187,17 @@ describe('progress.ts - Progress Bar', () => {
       expect(rawString).toContain('Story 4/8');
       expect(rawString).toContain('implementing...');
     });
+
+    test('should handle NaN current value without producing broken output', () => {
+      expect(() => displayProgress(NaN, 8, 'test')).not.toThrow();
+      const output = consoleOutput.join('\n');
+      expect(output).toContain('Story NaN/8');
+      // Bar should fall back to all empty (16 chars) instead of broken 0-width bar
+      const barMatch = output.match(/\[([█░#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      // With NaN input, should produce all empty bar
+      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+    });
   });
 });

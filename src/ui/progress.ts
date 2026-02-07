@@ -13,7 +13,7 @@ export function displayProgress(current: number, total: number, status: string):
   const empty = useUnicode ? UNICODE_EMPTY : ASCII_EMPTY;
 
   const rawFilledCount = total > 0 ? Math.round((current / total) * BAR_WIDTH) : 0;
-  const filledCount = Math.max(0, Math.min(BAR_WIDTH, rawFilledCount));
+  const filledCount = Math.max(0, Math.min(BAR_WIDTH, rawFilledCount)) || 0;
   const emptyCount = BAR_WIDTH - filledCount;
 
   const bar = filled.repeat(filledCount) + empty.repeat(emptyCount);

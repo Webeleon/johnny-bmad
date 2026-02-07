@@ -1,6 +1,6 @@
 # Story 3.4: Implement Progress Bar Component
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -91,6 +91,10 @@ so that I know how far along the epic is.
   - [x] 3.12: Test non-even division (3/7) produces bar with exactly 16 characters total
   - [x] 3.13: Test total=0 edge case does not crash (division by zero guard)
   - [x] 3.14: Test total=0 displays all empty bar characters
+  - [x] 3.15: Test current>total edge case (added in R1 review)
+  - [x] 3.16: Test negative current edge case (added in R1 review)
+  - [x] 3.17: Test negative total edge case (added in R2 review)
+  - [x] 3.18: Test NaN current edge case (added in R5 review)
 
 - [x] Task 4: Verify build and all tests pass (AC: #6, #7)
   - [x] 4.1: Run `bunx tsc --noEmit` -- no new TypeScript errors
@@ -129,6 +133,13 @@ so that I know how far along the epic is.
 - [x] [AI-Review][MEDIUM] `consoleRawArgs` capture infrastructure added to `beforeEach` (lines 7, 13, 17) but never read by any test. Dead code polluting every test run. Either fix the cyan test to use it for ANSI verification, or remove the dead infrastructure [src/ui/progress.test.ts:7,13,17]
 - [x] [AI-Review][MEDIUM] All R3 changes (cyan test, consoleRawArgs, removed CRITICAL comment, story updates) remain uncommitted — story shows R3 items marked `[x]` but git HEAD still has the R2 version. These changes need to be committed or reverted [uncommitted changes in progress.test.ts and story file]
 - [x] [AI-Review][LOW] `import chalk from 'chalk'` at progress.test.ts:2 is unused — chalk is never referenced in any test. Dead import left over from planned cyan test implementation that was rewritten as a smoke test. Remove it [src/ui/progress.test.ts:2]
+
+### Review Follow-ups Round 5 (AI)
+
+- [x] [AI-Review][MEDIUM] NaN input produces broken 0-width bar — `displayProgress(NaN, 8, 'test')` outputs `Story NaN/8 [] test...` because `Math.max(0, Math.min(BAR_WIDTH, NaN))` returns `NaN` and `String.repeat(NaN)` returns empty string. Fix: add NaN guard `const filledCount = Math.max(0, Math.min(BAR_WIDTH, rawFilledCount)) || 0;` [src/ui/progress.ts:16]
+- [x] [AI-Review][MEDIUM] File List does not document the story file itself as modified — File List claims only `progress.ts` and `progress.test.ts`, but commit `c1d0e93` also modifies `3-4-implement-progress-bar-component.md`. Update File List to include the story file for completeness [story file, File List section]
+- [x] [AI-Review][MEDIUM] Task subtask count (14) disagrees with Completion Notes test count (17) — Tasks 3.1-3.14 list 14 test subtasks but Completion Notes claim 17 tests. The 3 extra tests (current>total, negative current, negative total) were added as Review Follow-ups but never reflected as Task 3 subtasks. Add subtasks 3.15-3.17 for the review-added tests or clarify in Completion Notes that 14 are from original tasks + 3 from review rounds [story file, Tasks section]
+- [x] [AI-Review][LOW] Story file is 400+ lines for a 23-line implementation — Four rounds of review follow-ups (20 resolved items) add significant length. Keeping verbose history for documentation and learning purposes - detailed review history provides valuable context for future similar stories [story file, Review Follow-ups sections]
 
 ## Dev Notes
 
@@ -368,7 +379,8 @@ None
 - ✅ Review Round 1: Added 2 edge case tests (current > total, negative current) + clamping fix
 - ✅ Review Round 2: Added 1 edge case test (negative total)
 - ✅ Review Round 3: Added 1 color smoke test (cyan styling verification)
-- ✅ All tests pass (314 total in full suite; 17 tests in progress.test.ts from 285 baseline)
+- ✅ Review Round 5: Added 1 edge case test (NaN input) + NaN guard fix
+- ✅ All tests pass (18 tests in progress.test.ts; full suite test count may vary based on other stories)
   - **Note:** Test count reflects state at Round 3 completion (2026-02-08). Subsequent stories may have added more tests. Current full suite: 314 tests
 - ✅ Achieved 100% code coverage for `src/ui/progress.ts` (exceeds 90% requirement)
 - ✅ TypeScript compilation has 4 pre-existing errors (not introduced by this story)
@@ -391,9 +403,11 @@ None
 - ✅ Round 2: Resolved 4 review findings - Fixed File List accuracy (created→modified), added negative total test, corrected completion notes test count, improved bar-width assertions with non-null assertions
 - ✅ Round 3: Resolved 5 review findings - Added suffix behavior rationale note documenting total===0 edge case (M), updated test count disclaimer (M), added cyan color smoke test with documentation (M), removed inconsistent top-of-file comment (L), kept verbose review history for documentation purposes (L)
 - ✅ Round 4: Resolved 5 review findings - Fixed non-functional cyan test by forcing `chalk.level=3` and capturing raw ANSI output (H), removed dead `consoleRawArgs` infrastructure (M), chalk import now used properly for test setup (L), R3 cyan item remains correctly marked [x] (M), all changes will be committed in this session (M)
-- All 17 tests passing with 100% coverage maintained, cyan color test now properly verifies ANSI escape codes
+- ✅ Round 5: Resolved 4 review findings - Added NaN guard `|| 0` to prevent 0-width bar crash (M), updated File List to include story file (M), added subtasks 3.15-3.18 documenting review-added tests (M), kept verbose review history for learning value (L)
+- All 18 tests passing with 100% coverage maintained, NaN edge case now handled gracefully
 
 ### File List
 
 - `src/ui/progress.ts` (modified) - Implemented displayProgress() function body
-- `src/ui/progress.test.ts` (modified) - Comprehensive test suite with 17 tests (13 original + 3 edge cases from review rounds 1-2 + 1 color smoke test from round 3)
+- `src/ui/progress.test.ts` (modified) - Comprehensive test suite with 18 tests (13 original + 3 edge cases from review rounds 1-2 + 1 color smoke test from round 3 + 1 NaN test from round 5)
+- `_bmad-output/implementation-artifacts/3-4-implement-progress-bar-component.md` (modified) - Story file with review follow-ups and completion notes
