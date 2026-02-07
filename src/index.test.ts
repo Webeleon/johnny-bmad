@@ -371,7 +371,16 @@ describe('index.ts - Argument Parsing', () => {
       }) as any);
 
       try {
-        expect(() => validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true }))
+        expect(() => validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          reconfigure: false,
+          refreshModels: false,
+          batch: true,
+          devOnly: true
+        }))
           .toThrow('process.exit called');
 
         expect(exitSpy).toHaveBeenCalledWith(1);
@@ -409,7 +418,16 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when only --batch is set', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          reconfigure: false,
+          refreshModels: false,
+          batch: true,
+          devOnly: false
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -419,7 +437,16 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when only --dev-only is set', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: true });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          reconfigure: false,
+          refreshModels: false,
+          batch: false,
+          devOnly: true
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -429,7 +456,16 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when --batch and --yolo are used together', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: true,
+          reconfigure: false,
+          refreshModels: false,
+          batch: true,
+          devOnly: false
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -439,7 +475,16 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when --dev-only and --yolo are used together', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: false, devOnly: true });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: true,
+          reconfigure: false,
+          refreshModels: false,
+          batch: false,
+          devOnly: true
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -449,7 +494,16 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when no flags are set (default/sequential path)', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          reconfigure: false,
+          refreshModels: false,
+          batch: false,
+          devOnly: false
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -464,7 +518,16 @@ describe('index.ts - Argument Parsing', () => {
 
       try {
         expect(() => {
-          validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: true });
+          validateFlags({
+            resume: false,
+            help: false,
+            verbose: false,
+            yolo: true,
+            reconfigure: false,
+            refreshModels: false,
+            batch: true,
+            devOnly: true
+          });
         }).toThrow('process.exit called');
 
         // Mutual exclusion takes priority over yolo
@@ -486,7 +549,16 @@ describe('index.ts - Argument Parsing', () => {
 
       try {
         expect(() => {
-          validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true });
+          validateFlags({
+            resume: false,
+            help: false,
+            verbose: false,
+            yolo: false,
+            reconfigure: false,
+            refreshModels: false,
+            batch: true,
+            devOnly: true
+          });
         }).toThrow('process.exit called');
 
         // Verify exact message strings including whitespace formatting

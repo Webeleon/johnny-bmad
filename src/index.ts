@@ -2,21 +2,46 @@
 import { runOrchestrator } from './orchestrator.js';
 import { MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 import type { CliArgs } from './types.js';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-// Global handler for unhandled promise rejections
-process.on('unhandledRejection', (reason, _promise) => {
-  const now = new Date().toLocaleString();
-  const uptimeSec = Math.floor(process.uptime());
-  const mins = Math.floor(uptimeSec / 60);
-  const secs = uptimeSec % 60;
-  const uptime = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+let unhandledRejectionHandlerInstalled = false;
 
-  console.error(`\n[johnny-bmad] Unhandled rejection at ${now} (uptime: ${uptime}):`);
-  console.error(reason);
-  console.error('\nThis is often caused by Claude CLI encountering an API error.');
-  console.error('Run johnny-bmad again to resume from saved state.\n');
-  process.exit(1);
-});
+function installUnhandledRejectionHandler(): void {
+  if (unhandledRejectionHandlerInstalled) return;
+  unhandledRejectionHandlerInstalled = true;
+
+  // Global handler for unhandled promise rejections (CLI only)
+  process.on('unhandledRejection', (reason, _promise) => {
+    const now = new Date().toLocaleString();
+    const uptimeSec = Math.floor(process.uptime());
+    const mins = Math.floor(uptimeSec / 60);
+    const secs = uptimeSec % 60;
+    const uptime = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+    console.error(`\n[johnny-bmad] Unhandled rejection at ${now} (uptime: ${uptime}):`);
+    console.error(reason);
+    console.error('\nThis is often caused by Claude CLI encountering an API error.');
+    console.error('Run johnny-bmad again to resume from saved state.\n');
+    process.exit(1);
+  });
+}
+
+function isExecutedDirectly(): boolean {
+  // Bun supports import.meta.main. Node does not.
+  const bunImportMeta = import.meta as unknown as { main?: boolean };
+  if (bunImportMeta.main === true) return true;
+
+  // Node ESM fallback: compare argv[1] (entry script) with this module's path.
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    const thisFile = fileURLToPath(import.meta.url);
+    return resolve(argv1) === resolve(thisFile);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Parse command line arguments
@@ -254,6 +279,7 @@ export function formatErrorWithRecovery(err: unknown): { message: string; recove
  * @internal Exported for testing only
  */
 export async function main(): Promise<void> {
+  installUnhandledRejectionHandler();
   const args = parseArgs(process.argv.slice(2));
 
   // Validate flag combinations before any other processing
@@ -299,4 +325,7 @@ export async function main(): Promise<void> {
   }
 }
 
-main();
+if (isExecutedDirectly()) {
+  // Intentionally not awaited: CLI exit behavior is controlled via process.exit()
+  void main();
+}
