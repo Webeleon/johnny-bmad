@@ -77,6 +77,12 @@ export interface CliArgs {
   verbose: boolean;
   maxIterations?: number;
   yolo: boolean;
+  reconfigure: boolean;
+  refreshModels: boolean;
+  smModel?: string;
+  storyModel?: string;
+  devModel?: string;
+  reviewModel?: string;
   batch: boolean;
   devOnly: boolean;
 }
@@ -206,11 +212,65 @@ export interface LegacyState {
 }
 
 export interface ClaudeOptions {
-  model: 'opus' | 'sonnet';
+  model: string;
   prompt: string;
   cwd: string;
   allowedTools?: string[];
   agentRole?: string;
+}
+
+export type ProviderType = 'cli' | 'api';
+
+export interface Model {
+  id: string;
+  name: string;
+  providerId: string;
+  providerType: ProviderType;
+  description?: string;
+  contextWindow?: number;
+  supportsTools?: boolean;
+  pricePer1kTokens?: { input: number; output: number };
+}
+
+export interface LLMProvider {
+  id: string;
+  name: string;
+  type: ProviderType;
+  checkAvailable(): Promise<boolean>;
+  listModels(): Promise<Model[]>;
+  invoke(options: InvokeOptions): Promise<LLMResult>;
+  needsApiKey(): boolean;
+  supportsTools(model: string): boolean;
+  configure?(apiKey: string, baseUrl?: string): Promise<void>;
+}
+
+export interface InvokeOptions {
+  model: string;
+  prompt: string;
+  cwd?: string;
+  allowedTools?: string[];
+  agentRole?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  maxRetries?: number;
+}
+
+export interface LLMResult {
+  durationMs: number;
+  output?: string;
+  retries?: number;
+}
+
+export interface ProviderConfig {
+  apiKeys: Record<string, string>;
+  customProviders: Record<string, CustomProviderConfig>;
+  version: number;
+}
+
+export interface CustomProviderConfig {
+  name: string;
+  baseUrl: string;
+  models: Array<{ id: string; name: string; supportsTools?: boolean }>;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'success';

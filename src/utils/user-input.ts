@@ -21,19 +21,6 @@ export async function selectEpic(epics: Epic[]): Promise<Epic | null> {
   return epics.find(e => e.id === selectedEpic) || null;
 }
 
-export async function confirmResume(storyId: string, storyIndex: number): Promise<boolean> {
-  const { resume } = await inquirer.prompt<{ resume: boolean }>([
-    {
-      type: 'confirm',
-      name: 'resume',
-      message: `Resume from story ${storyId} (story #${storyIndex + 1})?`,
-      default: true
-    }
-  ]);
-
-  return resume;
-}
-
 export type MaxIterationsAction = 'continue' | 'complete' | 'skip' | 'abort';
 
 export async function handleMaxIterations(
@@ -68,18 +55,6 @@ export async function confirmAction(message: string, defaultValue = true): Promi
   ]);
 
   return confirmed;
-}
-
-export async function promptForInput(message: string): Promise<string> {
-  const { input } = await inquirer.prompt<{ input: string }>([
-    {
-      type: 'input',
-      name: 'input',
-      message
-    }
-  ]);
-
-  return input;
 }
 
 export async function confirmContinueNextEpic(nextEpicId: string): Promise<boolean> {

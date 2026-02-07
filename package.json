@@ -20,12 +20,14 @@
   "dependencies": {
     "chalk": "^5.4.1",
     "inquirer": "^9.3.7",
+    "node-fetch": "^3.3.2",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/inquirer": "^9.0.7",
-    "@types/node": "^20.x"
+    "@types/node": "^20.x",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18"

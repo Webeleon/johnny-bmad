@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { CliArgs, Epic, State, WorkflowMode } from './types.js';
 import { loadState, saveState, createInitialState, clearState } from './config.js';
 import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, getEpicsFromSprintStatus, updateSprintStatus, markEpicComplete } from './utils/files.js';
-import { selectEpic, confirmResume, handleMaxIterations, confirmAction, confirmContinueNextEpic } from './utils/user-input.js';
+import { selectEpic, handleMaxIterations, confirmAction, confirmContinueNextEpic } from './utils/user-input.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { runSmAgent } from './agents/sm.js';
 import { runStoryCreator } from './agents/story-creator.js';
@@ -11,6 +11,9 @@ import { runReviewAgent } from './agents/reviewer.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
 import { info, error, success, warn, header, step, setVerbose, successWithTiming } from './utils/logger.js';
 import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
+import { loadModelConfig, saveModelConfig, modelConfigExists } from './config/models.js';
+import { runOnboarding } from './onboarding.js';
+import { registry } from './providers/registry.js';
 
 /**
  * Determine workflow mode based on CLI arguments
@@ -21,7 +24,6 @@ import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
  */
 export function determineMode(args: CliArgs): WorkflowMode {
   // Note: Mutual exclusion of batch and devOnly is validated upstream in validateFlags()
-  // at src/index.ts:84-90 before runOrchestrator() is called
   if (args.batch) return 'batch';
   if (args.devOnly) return 'dev-only';
   return 'sequential';
@@ -72,10 +74,30 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
   successWithTiming('Pre-flight checks passed');
 
   // Determine workflow mode from CLI flags
-  // This value is used when creating fresh state (Priority 2 and 3 below)
-  // Resume path (Priority 1) uses state.workflow.mode from loaded state instead
-  // Called here (rather than inside Priority 2/3 blocks) to avoid duplication and keep logic simple
   const mode = determineMode(args);
+
+  // Model configuration
+  let modelConfig = loadModelConfig(cwd);
+
+  const needsOnboarding = !modelConfig && !args.resume && !args.yolo;
+
+  if (needsOnboarding || args.reconfigure) {
+    await runOnboarding(cwd);
+    modelConfig = loadModelConfig(cwd);
+  }
+
+  if (args.refreshModels) {
+    info('Refreshing model cache...');
+    await registry.getAllModels(cwd, true);
+    success('Model cache refreshed');
+  }
+
+  const finalConfig = {
+    sm: args.smModel ?? modelConfig?.sm ?? 'opus',
+    storyCreator: args.storyModel ?? modelConfig?.storyCreator ?? 'opus',
+    dev: args.devModel ?? modelConfig?.dev ?? 'sonnet',
+    reviewer: args.reviewModel ?? modelConfig?.reviewer ?? 'opus'
+  };
 
   // Main epic loop - continues until no more work available
   let continueProcessing = true;
@@ -85,6 +107,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     info('Checking for ongoing work...');
 
     let state = await loadState(cwd);
+    let mode = state?.workflow.mode ?? determineMode(args);
     let selectedEpicId: string | null = null;
     let autoStarted = false;
     let ongoingStories: Array<{ id: string; status: string }> = [];
@@ -94,6 +117,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       selectedEpicId = state.currentEpic;
       info(`Resuming in ${state.workflow.mode} mode...`);
       success(`Resuming ongoing session: ${state.currentEpic}`);
+      info(`Running in ${mode} mode`);
       info(`Story index: ${state.workflow.currentStoryIndex}, Completed: ${state.stories.completed.length}`);
       autoStarted = true;
     }
@@ -123,7 +147,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     if (!selectedEpicId) {
       step(1, 4, 'Running SM Agent to check sprint status');
       try {
-        await runSmAgent(cwd);
+        await runSmAgent(cwd, finalConfig.sm);
       } catch (smError) {
         const errorMessage = smError instanceof Error ? smError.message : String(smError);
         error(`SM agent failed: ${errorMessage}`);
@@ -245,7 +269,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       if (!storyExists) {
         info('Story file does not exist, creating...');
         try {
-          await runStoryCreator(cwd, epicStory, selectedEpic.id);
+          await runStoryCreator(cwd, epicStory, selectedEpic.id, finalConfig.storyCreator);
         } catch (createError) {
           const errorMessage = createError instanceof Error ? createError.message : String(createError);
           error(`Story creator failed: ${errorMessage}`);
@@ -254,7 +278,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
           await new Promise(resolve => setTimeout(resolve, 2000));
 
           try {
-            await runStoryCreator(cwd, epicStory, selectedEpic.id);
+            await runStoryCreator(cwd, epicStory, selectedEpic.id, finalConfig.storyCreator);
           } catch (retryError) {
             const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
             error(`Story creator failed on retry: ${retryMessage}`);
@@ -285,7 +309,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
         // Run Dev Agent with error handling
         try {
-          await runDevAgent(cwd, story.id, story.filePath);
+          await runDevAgent(cwd, story.id, story.filePath, finalConfig.dev);
         } catch (devError) {
           const errorMessage = devError instanceof Error ? devError.message : String(devError);
           error(`Dev agent failed: ${errorMessage}`);
@@ -295,7 +319,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
           await new Promise(resolve => setTimeout(resolve, 2000));
 
           try {
-            await runDevAgent(cwd, story.id, story.filePath);
+            await runDevAgent(cwd, story.id, story.filePath, finalConfig.dev);
           } catch (retryError) {
             const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
             error(`Dev agent failed on retry: ${retryMessage}`);
@@ -308,7 +332,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         // Run Review Agent with error handling
         let reviewResult;
         try {
-          reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
+          reviewResult = await runReviewAgent(cwd, story.id, story.filePath, finalConfig.reviewer);
         } catch (reviewError) {
           const errorMessage = reviewError instanceof Error ? reviewError.message : String(reviewError);
           error(`Review agent failed: ${errorMessage}`);
@@ -318,7 +342,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
           await new Promise(resolve => setTimeout(resolve, 2000));
 
           try {
-            reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
+            reviewResult = await runReviewAgent(cwd, story.id, story.filePath, finalConfig.reviewer);
           } catch (retryError) {
             const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
             error(`Review agent failed on retry: ${retryMessage}`);
@@ -359,7 +383,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
             // Run final dev pass to address last review feedback
             info('Running final dev pass before marking complete...');
             try {
-              await runDevAgent(cwd, story.id, story.filePath);
+              await runDevAgent(cwd, story.id, story.filePath, finalConfig.dev);
             } catch (devError) {
               const errorMessage = devError instanceof Error ? devError.message : String(devError);
               warn(`Final dev pass failed: ${errorMessage}, marking complete anyway`);
@@ -393,14 +417,12 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         }
       }
 
-      // Mark story as completed
-      state!.stories.completed.push(epicStory.id);
-      await saveState(cwd, state!);
-
-      // Update sprint-status.yaml to mark story as done
+      // Only mark story as completed if it actually completed (not skipped/blocked)
       if (storyComplete) {
+        state!.stories.completed.push(epicStory.id);
         await updateSprintStatus(cwd, epicStory.id, 'done');
       }
+      await saveState(cwd, state!);
     }
 
     // Step 4: Complete

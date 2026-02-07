@@ -6,13 +6,14 @@ import type { EpicStory } from '../types.js';
 export async function runStoryCreator(
   cwd: string,
   story: EpicStory,
-  epicId: string
+  epicId: string,
+  model?: string
 ): Promise<void> {
   subHeader(`Creating Story: ${story.id}`);
   info(`Story: ${story.title}`);
 
   const { durationMs } = await spawnClaude({
-    model: 'opus',
+    model: model || 'opus',
     prompt: getCreateStoryPrompt(story.id, story.title, epicId),
     cwd,
     allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],

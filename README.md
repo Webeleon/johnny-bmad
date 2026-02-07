@@ -37,6 +37,12 @@ That's it. Johnny will:
 | `--yolo` | `-y` | Auto-complete stories when max iterations reached (no prompt) |
 | `--batch` | `-b` | Create all stories first, review each one, then exit (no implementation) |
 | `--dev-only` | `-d` | Skip story creation, implement existing stories only |
+| `--sm-model MODEL` | `-s` | Model for SM agent (default: opus) |
+| `--story-model MODEL` | `-t` | Model for Story Creator (default: opus) |
+| `--dev-model MODEL` | | Model for Dev agent (default: sonnet) |
+| `--review-model MODEL` | `-R` | Model for Reviewer (default: opus) |
+| `--reconfigure` | | Force run model configuration onboarding |
+| `--refresh-models` | | Refresh model cache (discover available models) |
 | `--help` | `-h` | Show help message |
 
 ```bash
@@ -50,12 +56,26 @@ johnny-bmad -m 3 -y         # 3 iterations max, auto-complete if stuck
 johnny-bmad --batch         # Create and review stories before implementing
 johnny-bmad --dev-only      # Implement pre-created stories
 johnny-bmad --batch --yolo  # Create stories without review prompts
+
+# Model configuration
+johnny-bmad                 # First run (triggers onboarding)
+johnny-bmad --reconfigure   # Reconfigure models
+
+# Override specific models
+johnny-bmad --sm-model opus --dev-model sonnet --review-model haiku
+johnny-bmad --dev-model openai:gpt-4  # Use OpenAI for Dev agent
+
+# Refresh model cache
+johnny-bmad --refresh-models
+
+# Combined with existing flags
+johnny-bmad -v --dev-model openai:gpt-4 -m 5 --yolo
 ```
 
 ### Requirements
 
 - **BMAD Project** with `_bmad/` folder
-- **Claude Code CLI** (`claude` command in PATH)
+- **At least one LLM provider** (CLI tool or API key configured)
 - **Node.js 18+**
 - **Git** (optional, for auto-commits)
 
@@ -89,7 +109,49 @@ User selects epic
 └─────────────────────────────────────────┘
 ```
 
-Stories loop through dev → review until the reviewer marks them done. Default max is 10 iterations per story, then you're prompted to continue, skip, or abort. Use `--yolo` to auto-complete stuck stories instead of prompting.
+ Stories loop through dev → review until the reviewer marks them done. Default max is 10 iterations per story, then you're prompted to continue, skip, or abort. Use `--yolo` to auto-complete stuck stories instead of prompting.
+
+### Multi-Provider Support
+
+Johnny BMAD supports multiple LLM providers via CLI tools and API keys:
+
+| Provider | Type | Detection | Models |
+|----------|-------|-----------|---------|
+| **Claude** | CLI | `claude --version` | opus, sonnet, haiku |
+| **OpenAI Codex** | CLI | `codex --version` | gpt-5.3-codex, ... |
+| **Kimi** | CLI | `kimi --version` | moonshot-v1-8k, 32k, 128k |
+| **OpenAI** | API | API key | gpt-4, gpt-4-turbo, gpt-3.5-turbo |
+| **GLM** | API | API key | glm-4, glm-4-plus, glm-4v |
+| **Custom** | API | User-configured | User-defined |
+
+#### First-Time Setup
+
+Run `johnny-bmad` in a new project to start onboarding:
+
+1. Detect CLI Tools
+2. Configure API Providers
+3. Add Custom Providers
+4. Discover Available Models
+5. Configure Models for Each Agent
+6. Save Configuration
+
+#### Configuration Files
+
+- **~/.johnny-bmad/providers.json** - Global API keys (shared across all projects)
+- **.johnny-bmad/models.json** - Per-project model selection
+- **.johnny-bmad-models-cache.json** - Model cache (1-hour TTL)
+
+#### Model ID Format
+
+Models can be specified in two ways:
+
+- **Short name**: `opus`, `sonnet`, `haiku`, `gpt-4`, `glm-4`
+  - Auto-detects provider from model registry
+  - Example: `--dev-model sonnet` (uses Claude)
+
+- **Full ID (provider-prefixed)**: `claude:opus`, `openai:gpt-4`, `glm:glm-4`
+  - Explicitly specifies provider
+  - Example: `--dev-model openai:gpt-4` (uses OpenAI)
 
 ### State Persistence
 
@@ -127,6 +189,15 @@ src/
 ├── agents/               # SM, Story, Dev, Reviewer
 ├── claude/               # CLI spawning & prompts
 ├── git/                  # Commit operations
+├── providers/            # Multi-provider system
+│   ├── registry.ts       # Provider registry
+│   ├── api-provider.ts   # API provider base
+│   ├── cli-provider.ts   # CLI provider base
+│   ├── cache.ts          # Model cache
+│   └── providers/        # Built-in providers (claude, openai, glm, etc.)
+├── config/               # Configuration management
+│   └── models.ts        # Model config save/load
+├── onboarding.ts         # First-run setup
 └── utils/                # Logging, file parsing
 ```
 

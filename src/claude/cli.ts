@@ -3,12 +3,25 @@ import type { ClaudeOptions, ClaudeResult } from '../types.js';
 import { debug, isVerbose, agentLifecycle } from '../utils/logger.js';
 import { createLabeledStream } from '../utils/stream-wrapper.js';
 
+/**
+ * Resolves a model ID for the Claude CLI.
+ * Strips provider prefix (e.g., "claude:opus" -> "opus") since the CLI
+ * expects bare model names like "opus", "sonnet", "haiku".
+ */
+function resolveModelForCli(modelId: string): string {
+  if (modelId.includes(':')) {
+    return modelId.split(':')[1];
+  }
+  return modelId;
+}
+
 export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
+    const resolvedModel = resolveModelForCli(opts.model);
 
     const args: string[] = [
-      '--model', opts.model,
+      '--model', resolvedModel,
       '-p', opts.prompt
     ];
 

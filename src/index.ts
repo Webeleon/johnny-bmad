@@ -28,6 +28,8 @@ export function parseArgs(argv: string[]): CliArgs {
     help: false,
     verbose: false,
     yolo: false,
+    reconfigure: false,
+    refreshModels: false,
     batch: false,
     devOnly: false
   };
@@ -71,6 +73,47 @@ export function parseArgs(argv: string[]): CliArgs {
       case '-d':
         args.devOnly = true;
         break;
+      case '--reconfigure':
+        args.reconfigure = true;
+        break;
+      case '--refresh-models':
+        args.refreshModels = true;
+        break;
+      case '--sm-model':
+      case '-s': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          args.smModel = nextArg;
+          i++;
+        }
+        break;
+      }
+      case '--story-model':
+      case '-t': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          args.storyModel = nextArg;
+          i++;
+        }
+        break;
+      }
+      case '--dev-model': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          args.devModel = nextArg;
+          i++;
+        }
+        break;
+      }
+      case '--review-model':
+      case '-R': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          args.reviewModel = nextArg;
+          i++;
+        }
+        break;
+      }
     }
   }
 
@@ -99,13 +142,19 @@ johnny-bmad - BMAD Implementation Phase Automation
 
 Usage: npx johnny-bmad [options]
 
-Options:
+  Options:
   --resume, -r              Auto-resume from saved state without prompting
   --verbose, -v             Enable verbose/debug output
   --max-iterations, -m N    Max dev-review cycles per story (default: 10)
   --yolo, -y                Auto-complete stories when max iterations reached
   --batch, -b               Create all stories first, review each one, then exit (no implementation)
   --dev-only, -d            Skip story creation, implement existing stories only
+  --reconfigure             Reconfigure model selection (run onboarding again)
+  --refresh-models          Force refresh of model cache from all providers
+  --sm-model, -s MODEL      Override SM agent model (e.g., claude:opus)
+  --story-model, -t MODEL   Override Story Creator model (e.g., claude:opus)
+  --dev-model MODEL         Override Dev agent model (e.g., claude:sonnet)
+  --review-model, -R MODEL  Override Reviewer model (e.g., claude:opus)
   --help, -h                Show this help message
 
 Description:
@@ -128,7 +177,21 @@ Requirements:
   - Claude Code CLI must be installed (claude command available)
   - Git repository (optional, for commits)
 
-Examples:
+  Model Configuration:
+   On first run, you'll be guided through:
+   - CLI tool detection (Claude, Codex, Kimi)
+   - API provider configuration (OpenAI, GLM, Kimi)
+   - Custom provider addition (optional)
+   - Model selection for each agent (SM, Story Creator, Dev, Reviewer)
+
+   Run johnny-bmad without --resume to start onboarding if config doesn't exist.
+   Use --reconfigure to change models at any time.
+
+   Models can be specified as:
+   - Short name: opus, sonnet, haiku, gpt-4, glm-4
+   - Full ID: claude:opus, openai:gpt-4, glm:glm-4
+
+ Examples:
   npx johnny-bmad              # Start sequential workflow (default)
   npx johnny-bmad --resume     # Auto-resume from last session
   npx johnny-bmad -v           # Verbose output for debugging
@@ -136,6 +199,9 @@ Examples:
   npx johnny-bmad --batch      # Create and review stories before implementing
   npx johnny-bmad --dev-only   # Implement pre-created stories
   npx johnny-bmad --batch --yolo   # Create stories without review prompts
+  npx johnny-bmad --reconfigure    # Reconfigure model selection
+  npx johnny-bmad --dev-model openai:gpt-4  # Override Dev agent model
+  npx johnny-bmad -s opus --dev-model sonnet -R haiku  # Override multiple models
 
 Documentation: https://github.com/webeleon/johnny-bmad
 `);

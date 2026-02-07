@@ -5,13 +5,14 @@ import { info, subHeader, infoWithTiming } from '../utils/logger.js';
 export async function runDevAgent(
   cwd: string,
   storyId: string,
-  storyFilePath: string
+  storyFilePath: string,
+  model?: string
 ): Promise<void> {
   subHeader(`Dev Agent: ${storyId}`);
   info('Implementing story...');
 
   const { durationMs } = await spawnClaude({
-    model: 'sonnet',
+    model: model || 'sonnet',
     prompt: getDevStoryPrompt(storyId, storyFilePath),
     cwd,
     allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],

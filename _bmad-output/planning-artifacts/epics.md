@@ -1551,3 +1551,16 @@ Skipped stories (manual intervention needed):
 **And** displays: `Session complete. Total time: 3h 42m`
 
 **FRs:** FR56 (uses celebration from Epic 3)
+
+---
+
+### Epic 6: Multi-Provider LLM System
+
+**Epic Goal:** I can use johnny-bmad with any LLM provider (Claude CLI, OpenAI Codex CLI, Kimi CLI, or APIs like OpenAI, GLM) and configure different models for each agent phase (SM, Story Creator, Dev, Reviewer) through a comprehensive onboarding system.
+
+**FRs Covered:** FR-ProviderDetection, FR-ProviderConfig, FR-ModelSelection, FR-CLIProviders, FR-APIProviders, FR-ModelCaching, FR-ProviderRegistry, FR-AgentModelParams, FR-OnboardingFlow, FR-CliOverrides, FR-ConfigPersistence, FR-RecoveryStrategy
+**NFRs Covered:** NFR-ProviderDiscovery, NFR-APIKeyStorage, NFR-ModelValidation, NFR-CacheTTL, NFR-RetryLogic, NFR-ConfigBackwardCompat, NFR-OnboardingUX, NFR-CLICommandDetection
+**Additional:** ARCH-Provider, ARCH-Cache
+
+---
+
