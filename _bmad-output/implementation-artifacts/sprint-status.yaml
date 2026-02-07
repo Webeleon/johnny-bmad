@@ -16,30 +16,46 @@ development_status:
   2-3-implement-workflow-mode-determination: done
   2-4-update-help-text-with-new-flags-and-examples: done
   epic-2-retrospective: optional
-  epic-3: in-progress
-  3-1-create-ui-component-directory-structure-and-index: backlog
-  3-2-implement-ascii-banner-component: backlog
-  3-3-implement-phase-header-component: backlog
-  3-4-implement-progress-bar-component: backlog
-  3-5-implement-agent-activity-line-component: backlog
-  3-6-implement-status-message-component: backlog
-  3-7-implement-story-review-card-component: backlog
-  3-8-implement-error-block-and-celebration-components: backlog
+  epic-3: done
+  3-1-create-ui-component-directory-structure-and-index: done
+  3-2-implement-ascii-banner-component: done
+  3-3-implement-phase-header-component: done
+  3-4-implement-progress-bar-component: done
+  3-5-implement-agent-activity-line-component: done
+  3-6-implement-status-message-component: done
+  3-7-implement-story-review-card-component: done
+  3-8-implement-error-block-and-celebration-components: done
   epic-3-retrospective: optional
-  epic-4: backlog
-  4-1-implement-runbatchworkflow-function-shell: backlog
-  4-2-implement-batch-story-creation-loop: backlog
-  4-3-implement-per-story-review-flow: backlog
-  4-4-implement-story-change-request-iteration: backlog
-  4-5-implement-auto-approve-mode-for-batch: backlog
-  4-6-implement-batch-completion-and-exit: backlog
-  4-7-implement-retry-logic-for-story-creator: backlog
+  epic-4: done
+  4-1-implement-runbatchworkflow-function-shell: done
+  4-2-implement-batch-story-creation-loop: done
+  4-3-implement-per-story-review-flow: done
+  4-4-implement-story-change-request-iteration: done
+  4-5-implement-auto-approve-mode-for-batch: done
+  4-6-implement-batch-completion-and-exit: done
+  4-7-implement-retry-logic-for-story-creator: done
   epic-4-retrospective: optional
-  epic-5: backlog
-  5-1-implement-rundevonlyworkflow-function-shell: backlog
-  5-2-implement-story-detection-and-pre-implementation-display: backlog
-  5-3-implement-dev-agent-execution-with-retry: backlog
-  5-4-implement-reviewer-agent-execution-with-retry: backlog
-  5-5-implement-dev-review-loop-and-commit-flow: backlog
-  5-6-implement-dev-only-completion-with-celebration: backlog
+  epic-5: done
+  5-1-implement-rundevonlyworkflow-function-shell: done
+  5-2-implement-story-detection-and-pre-implementation-display: done
+  5-3-implement-dev-agent-execution-with-retry: done
+  5-4-implement-reviewer-agent-execution-with-retry: done
+  5-5-implement-dev-review-loop-and-commit-flow: done
+  5-6-implement-dev-only-completion-with-celebration: done
   epic-5-retrospective: optional
+  epic-6: done
+  6-1-define-enhanced-provider-types: done
+  6-2-create-provider-base-classes: done
+  6-3-implement-cli-providers: done
+  6-4-implement-api-providers: done
+  6-5-create-provider-registry: done
+  6-6-create-model-configuration-system: done
+  6-7-create-model-caching: done
+  6-8-implement-comprehensive-onboarding: done
+  6-9-update-all-agents: done
+  6-10-integrate-into-orchestrator: done
+  6-11-update-cli-arguments: done
+  6-12-add-package-dependencies: done
+  6-13-create-tests: done
+  6-14-update-documentation: done
+  epic-6-retrospective: optional

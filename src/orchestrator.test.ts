@@ -16,6 +16,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: true,
         devOnly: false
       };
@@ -28,6 +30,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: true
       };
@@ -40,6 +44,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: false
       };
@@ -52,6 +58,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: true,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: false,
         maxIterations: 5
@@ -65,6 +73,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: true,
         yolo: true,
+        reconfigure: false,
+        refreshModels: false,
         batch: true,
         devOnly: false
       };
@@ -77,6 +87,8 @@ describe('orchestrator.ts - Workflow Routing', () => {
         help: false,
         verbose: true,
         yolo: true,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: true
       };
@@ -172,6 +184,8 @@ describe('runOrchestrator() - Mode Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: false
       };
@@ -256,6 +270,8 @@ describe('runOrchestrator() - Mode Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false,
         devOnly: false
       };
@@ -341,6 +357,8 @@ describe('runOrchestrator() - Mode Routing', () => {
         help: false,
         verbose: false,
         yolo: false,
+        reconfigure: false,
+        refreshModels: false,
         batch: false, // CLI says NOT batch
         devOnly: true // CLI says dev-only
       };

@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { info, warn, debug } from '../utils/logger.js';
 
 function runGitCommand(args: string[], cwd: string): Promise<{ code: number; output: string }> {
@@ -27,20 +27,6 @@ function runGitCommand(args: string[], cwd: string): Promise<{ code: number; out
       resolve({ code: 1, output: '' });
     });
   });
-}
-
-function runGitCommandSync(args: string[], cwd: string): { code: number; output: string } {
-  try {
-    const output = execSync(['git', ...args].join(' '), {
-      cwd,
-      encoding: 'utf-8',
-      stdio: ['inherit', 'pipe', 'pipe']
-    });
-    return { code: 0, output: output || '' };
-  } catch (err: unknown) {
-    const error = err as { status?: number; stdout?: string };
-    return { code: error.status ?? 1, output: error.stdout ?? '' };
-  }
 }
 
 export async function commitStoryChanges(

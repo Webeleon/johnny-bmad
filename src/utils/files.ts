@@ -51,6 +51,31 @@ export async function loadSprintStatus(cwd: string): Promise<SprintStatus | null
   }
 }
 
+const EPICS_MD = 'epics.md';
+
+/**
+ * Parse epics.md (single file listing all epics).
+ * Matches lines like "### Epic 6: Multi-Provider LLM System".
+ * Stories are left empty; orchestrator fills from sprint-status when needed.
+ */
+function parseEpicsMd(content: string): Epic[] {
+  const epics: Epic[] = [];
+  const lines = content.split('\n');
+  const epicHeading = /^###\s+Epic\s+(\d+):\s*(.+)$/;
+  for (const line of lines) {
+    const m = line.match(epicHeading);
+    if (m) {
+      epics.push({
+        id: m[1],
+        title: m[2].trim(),
+        stories: [],
+        filePath: ''
+      });
+    }
+  }
+  return epics;
+}
+
 export async function loadEpics(cwd: string): Promise<Epic[]> {
   const epicsPath = join(cwd, EPICS_DIR);
   const epics: Epic[] = [];
@@ -65,6 +90,17 @@ export async function loadEpics(cwd: string): Promise<Epic[]> {
       const epic = parseEpicFile(content, filePath);
       if (epic) {
         epics.push(epic);
+      }
+    }
+
+    // If no individual epic-N.md files, try consolidated epics.md
+    if (epics.length === 0 && files.includes(EPICS_MD)) {
+      const epicsMdPath = join(epicsPath, EPICS_MD);
+      const content = await readFile(epicsMdPath, 'utf-8');
+      const fromMd = parseEpicsMd(content);
+      epics.push(...fromMd);
+      if (fromMd.length > 0) {
+        debug(`Loaded ${fromMd.length} epics from ${EPICS_MD}`);
       }
     }
   } catch (err) {
@@ -235,7 +271,6 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
 
   const entries = Object.entries(sprintStatus.development_status);
   const actionableStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
-  const incompleteStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
 
   // Separate epics and stories (epics start with "epic-")
   const inProgressEpics: string[] = [];
@@ -271,7 +306,7 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
 
     // Check if any story is NOT done
     const hasIncompleteWork = epicStories.some(([, status]) =>
-      incompleteStatuses.includes(status)
+      actionableStatuses.includes(status)
     );
 
     if (hasIncompleteWork) {
