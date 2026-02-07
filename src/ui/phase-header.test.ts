@@ -19,7 +19,11 @@ describe('phase-header.ts - Phase Header', () => {
 
   afterEach(() => {
     console.log = originalLog;
-    process.env.TERM = originalTerm as string;
+    if (originalTerm === undefined) {
+      delete process.env.TERM;
+    } else {
+      process.env.TERM = originalTerm;
+    }
     if (originalAscii === undefined) {
       delete process.env.JOHNNY_BMAD_ASCII;
     } else {

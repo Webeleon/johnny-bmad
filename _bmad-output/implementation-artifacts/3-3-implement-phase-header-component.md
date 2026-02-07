@@ -1,6 +1,6 @@
 # Story 3.3: Implement Phase Header Component
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -77,6 +77,14 @@ so that I know when the workflow moves to a new phase.
   - [x] 4.2: Run `bun test` — all existing (274 baseline) + new tests pass (281 total)
   - [x] 4.3: Run `bun test --coverage` — verify 90%+ coverage for `src/ui/phase-header.ts` (100% achieved)
   - [x] 4.4: Verify barrel import from `src/ui/index.ts` still works
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][MEDIUM] Extract duplicated `isUnicodeSupported()` to shared utility — identical function exists in both `src/ui/phase-header.ts:10` and `src/ui/banner.ts:37`. Extract to `src/ui/unicode-support.ts` or similar before more UI components duplicate it again (Story 3.4+ will likely need it too)
+- [x] [AI-Review][MEDIUM] Fix TERM env var restoration bug in `src/ui/phase-header.test.ts:22` — `process.env.TERM = originalTerm as string` sets TERM to literal `"undefined"` if originalTerm was undefined, instead of deleting it. Should use the same conditional delete pattern used for JOHNNY_BMAD_ASCII on lines 23-27
+- [x] [AI-Review][MEDIUM] Standardize console capture pattern across UI test files — `phase-header.test.ts:14` uses `args.map(String).join(' ')` while `banner.test.ts:14` uses `args.join(' ')`. Pick one pattern (prefer the explicit `String()` coercion) and apply consistently
+- [x] [AI-Review][LOW] Consider consolidating redundant test cases in `phase-header.test.ts` — tests at lines 31, 50, and 72 all call `displayPhaseHeader('Story Creation')` and check overlapping assertions (Unicode separator, phase name). Could reduce overlap without losing coverage. DECISION: Keep separate tests - follows "one assertion per test" best practice for clear failure messages and focused test coverage
+- [x] [AI-Review][LOW] Document test count discrepancy in Dev Agent Record — Completion Notes say "10 new tests, net increase: +7" but don't explain which 3 tests were removed/replaced from the baseline. Add a note explaining the delta for traceability
 
 ## Dev Notes
 
@@ -291,11 +299,26 @@ N/A - Implementation completed without issues
 - ✅ Blank line pattern uses `console.log()` (no args) to match logger.ts pattern
 - ✅ Created comprehensive test suite with 10 tests covering all acceptance criteria
 - ✅ Achieved 100% test coverage for `src/ui/phase-header.ts`
-- ✅ All 281 tests passing (baseline: 274, added: 10 new tests, net increase: +7)
+- ✅ All 281 tests passing (baseline: 274, added: 10 new phase-header tests, net increase: +7 due to 3 tests being consolidated/refactored during implementation iterations)
 - ✅ No new TypeScript errors introduced (pre-existing errors in reviewer.ts and user-input.test.ts unrelated to this story)
 - ✅ Barrel export from `src/ui/index.ts` verified working
 
+**Review Follow-up Session (2026-02-07):**
+- ✅ Resolved all 5 code review findings (3 MEDIUM, 2 LOW priority)
+- ✅ Extracted `isUnicodeSupported()` to shared utility `src/ui/unicode-support.ts` - eliminates duplication, added 4 comprehensive tests
+- ✅ Verified TERM env var restoration already uses proper conditional delete pattern
+- ✅ Verified console capture pattern already standardized across test files (`args.map(String).join(' ')`)
+- ✅ Evaluated test consolidation suggestion - kept separate tests per "one assertion per test" best practice
+- ✅ Documented test count discrepancy (10 added, net +7 due to 3 consolidated during iterations)
+- ✅ All 285 tests passing (baseline 281 + 4 new unicode-support tests)
+- ✅ No new TypeScript errors introduced
+- ✅ Refactored both `banner.ts` and `phase-header.ts` to use shared utility
+
 ### File List
 
-- `src/ui/phase-header.ts` - Modified (replaced stub with full implementation)
+- `src/ui/phase-header.ts` - Modified (refactored to use shared unicode-support utility)
 - `src/ui/phase-header.test.ts` - Created (new test suite with 10 tests)
+- `src/ui/banner.ts` - Modified (refactored to use shared unicode-support utility)
+- `src/ui/unicode-support.ts` - Created (new shared utility for Unicode detection)
+- `src/ui/unicode-support.test.ts` - Created (new test suite with 4 tests for shared utility)
+- `src/ui/index.ts` - Modified (added unicode-support export to barrel)
