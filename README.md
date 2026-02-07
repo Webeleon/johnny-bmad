@@ -79,8 +79,8 @@ On first run, Johnny will guide you through:
 | `--verbose` | `-v` | Enable debug output for troubleshooting |
 | `--max-iterations N` | `-m N` | Max dev-review cycles per story (default: 10) |
 | `--yolo` | `-y` | Auto-complete stories when max iterations reached |
-| `--batch` | `-b` | Create all stories first, then review (no implementation) |
-| `--dev-only` | `-d` | Skip story creation, implement existing stories only |
+| `--batch` | `-b` | Create all stories first, then review (no implementation) **[EXPERIMENTAL]** |
+| `--dev-only` | `-d` | Skip story creation, implement existing stories only **[EXPERIMENTAL]** |
 | `--sm-model MODEL` | `-s` | Model for SM agent (default: opus) |
 | `--story-model MODEL` | `-t` | Model for Story Creator (default: opus) |
 | `--dev-model MODEL` | | Model for Dev agent (default: sonnet) |
@@ -107,13 +107,13 @@ Picks up where you left off using saved state from `.johnny-bmad-state.json`.
 ```bash
 johnny-bmad --batch
 ```
-Creates all stories for an epic first, then reviews each one. Useful for planning phases.
+**Note:** currently an experimental stub — it will print a warning and exit.
 
 #### Development-Only Mode
 ```bash
 johnny-bmad --dev-only
 ```
-Skips story creation and implements pre-existing stories. Great for re-running implementations.
+**Note:** currently an experimental stub — it will print a warning and exit.
 
 #### Limited Iterations with Auto-Complete
 ```bash

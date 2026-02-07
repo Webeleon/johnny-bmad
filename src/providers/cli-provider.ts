@@ -69,16 +69,10 @@ export abstract class CliProvider implements LLMProvider {
       cwd: options.cwd ?? process.cwd()
     });
 
-    let output = '';
-    let errorOutput = '';
-    if (captureOutput) {
-      if (child.stdout) {
-        output = await this.streamToString(child.stdout);
-      }
-      if (child.stderr) {
-        errorOutput = await this.streamToString(child.stderr);
-      }
-    }
+    // IMPORTANT: attach close/error listeners immediately.
+    // Awaiting stream reads before registering 'close' can miss the event.
+    const stdoutPromise = captureOutput && child.stdout ? this.streamToString(child.stdout) : Promise.resolve('');
+    const stderrPromise = captureOutput && child.stderr ? this.streamToString(child.stderr) : Promise.resolve('');
 
     return new Promise((resolve, reject) => {
       const timeoutMs = 30 * 60 * 1000; // 30 minutes - CLI sessions can be long-running
@@ -94,11 +88,17 @@ export abstract class CliProvider implements LLMProvider {
 
       child.on('close', (code) => {
         clearTimeout(timeout);
-        if (code === 0) {
-          resolve(output + errorOutput);
-        } else {
-          reject(new Error(`${this.name} exited with code ${code}`));
-        }
+        Promise.all([stdoutPromise, stderrPromise])
+          .then(([output, errorOutput]) => {
+            if (code === 0) {
+              resolve(output + errorOutput);
+            } else {
+              reject(new Error(`${this.name} exited with code ${code}`));
+            }
+          })
+          .catch((streamErr) => {
+            reject(streamErr);
+          });
       });
     });
   }

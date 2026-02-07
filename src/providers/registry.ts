@@ -115,7 +115,7 @@ export class ProviderRegistry {
       const matched = models.find(m => m.id === modelId || m.name === modelId);
 
       if (!matched) {
-        throw new Error(`Model '${modelId}' not found. Run --onboarding to see available models.`);
+        throw new Error(`Model '${modelId}' not found. Run johnny-bmad --reconfigure (or --refresh-models) to see available models.`);
       }
 
       providerId = matched.providerId;

@@ -307,7 +307,7 @@ describe('index.ts - Argument Parsing', () => {
 
         // Verify --batch --yolo example is included
         expect(helpOutput).toContain('npx johnny-bmad --batch --yolo');
-        expect(helpOutput).toContain('Create stories without review prompts');
+        expect(helpOutput).toContain('Stub: prints warning then exits');
       } finally {
         consoleSpy.mockRestore();
       }
