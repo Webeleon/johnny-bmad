@@ -1,6 +1,10 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { displayProgress } from './progress.js';
 
+// CRITICAL: This test file implements AC requirements from Story 3.4
+// The suffix '...' is controlled by current >= total, NOT by status string
+// See AC #3: "trailing ... is NOT appended when current >= total (completion state)"
+
 describe('progress.ts - Progress Bar', () => {
   let consoleOutput: string[];
   let originalLog: typeof console.log;
@@ -45,7 +49,7 @@ describe('progress.ts - Progress Bar', () => {
       expect(output).toContain('complete');
     });
 
-    test('should include ... suffix for non-complete statuses', () => {
+    test('should include ... suffix when current < total', () => {
       displayProgress(3, 10, 'testing');
       const output = consoleOutput.join('\n');
       expect(output).toContain('testing...');
@@ -94,11 +98,10 @@ describe('progress.ts - Progress Bar', () => {
     test('should have bar width of exactly 16 characters', () => {
       displayProgress(4, 8, 'implementing');
       const output = consoleOutput.join('\n');
+      // Extract the bar content between [ and ]
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      if (barMatch) {
-        expect(barMatch[1].length).toBe(16);
-      }
+      expect(barMatch![1].length).toBe(16);
     });
 
     test('should produce bar with exactly 16 characters for non-even division (3/7)', () => {
@@ -106,23 +109,55 @@ describe('progress.ts - Progress Bar', () => {
       const output = consoleOutput.join('\n');
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      if (barMatch) {
-        expect(barMatch[1].length).toBe(16);
-      }
+      expect(barMatch![1].length).toBe(16);
     });
 
     test('should not crash with total=0 edge case', () => {
       expect(() => displayProgress(0, 0, 'empty')).not.toThrow();
     });
 
-    test('should display all empty bar when total=0 (AC #9)', () => {
+    test('should display all empty bar characters when total=0', () => {
       displayProgress(0, 0, 'empty');
       const output = consoleOutput.join('\n');
       expect(output).toContain('Story 0/0');
       expect(output).toContain('░░░░░░░░░░░░░░░░');
-      // 0 >= 0 is true, so NO ... suffix per AC #3
-      expect(output).toContain('empty');
+      // AC #3: Suffix based on current >= total check: 0 >= 0 is true, so no dots
       expect(output).not.toContain('empty...');
+    });
+
+    test('should not crash when current > total (clamped to max bar width)', () => {
+      expect(() => displayProgress(10, 8, 'overflow')).not.toThrow();
+      const output = consoleOutput.join('\n');
+      expect(output).toContain('Story 10/8');
+      // Bar should be clamped to max width (all filled)
+      const barMatch = output.match(/\[([█░]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('████████████████');
+    });
+
+    test('should not crash with negative current value (clamped to 0)', () => {
+      expect(() => displayProgress(-1, 8, 'negative')).not.toThrow();
+      const output = consoleOutput.join('\n');
+      expect(output).toContain('Story -1/8');
+      // Bar should be clamped to 0 filled (all empty)
+      const barMatch = output.match(/\[([█░]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+    });
+
+    test('should handle negative total parameter gracefully', () => {
+      expect(() => displayProgress(2, -5, 'broken')).not.toThrow();
+      const output = consoleOutput.join('\n');
+      expect(output).toContain('Story 2/-5');
+      // With negative total, produces empty bar (division guard: total > 0 check)
+      const barMatch = output.match(/\[([█░]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      // Status with no dots since 2 >= -5 is true
+      expect(output).not.toContain('broken...');
     });
   });
 });

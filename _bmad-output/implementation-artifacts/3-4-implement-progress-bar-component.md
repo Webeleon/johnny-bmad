@@ -98,6 +98,22 @@ so that I know how far along the epic is.
   - [x] 4.3: Run `bun test --coverage` -- verify 90%+ coverage for `src/ui/progress.ts`
   - [x] 4.4: Verify barrel import from `src/ui/index.ts` still works
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Clamp `filledCount` to `[0, BAR_WIDTH]` to prevent `RangeError` crash when `current > total` or `current < 0` — `String.repeat(negative)` throws. Fix: `Math.max(0, Math.min(BAR_WIDTH, filledCount))` [src/ui/progress.ts:15]
+- [x] [AI-Review][HIGH] Revert uncommitted test modifications in `src/ui/progress.test.ts` — working copy changed test to expect `finishing...` when `current >= total`, contradicting AC #3 and causing 1 test failure. Committed version is correct [src/ui/progress.test.ts:67-71]
+- [x] [AI-Review][MEDIUM] Fix Completion Notes inaccuracy — notes claim `status === 'complete'` omits `...` but implementation uses `current >= total` (numeric comparison). Update notes to match actual behavior [story file, Completion Notes line 334]
+- [x] [AI-Review][MEDIUM] Clean up leftover debug/backup files: `src/ui/progress.test.ts.backup`, `src/ui/progress.test.ts.bak`, `src/ui/progress.test.ts.bak2`, `test-manual.mjs`, `test-manual.ts`, `test-progress-debug.ts`, `test-progress-manual.ts` (7 files)
+- [x] [AI-Review][LOW] Add test for `current > total` edge case (e.g., `displayProgress(10, 8, 'x')`) — currently untested and crashes without the H1 clamp fix [src/ui/progress.test.ts]
+- [x] [AI-Review][LOW] Add test for negative `current` edge case (e.g., `displayProgress(-1, 8, 'x')`) — currently untested and crashes without the H1 clamp fix [src/ui/progress.test.ts]
+
+### Review Follow-ups Round 2 (AI)
+
+- [x] [AI-Review][MEDIUM] File List claims `src/ui/progress.test.ts (created)` but git shows modified — file pre-existed from earlier story. Update to `(modified)` [story file, File List section]
+- [x] [AI-Review][MEDIUM] No test for negative `total` parameter (e.g., `displayProgress(2, -5, 'broken')`) — silently produces empty bar with no suffix dots. Add edge case test [src/ui/progress.test.ts]
+- [x] [AI-Review][MEDIUM] Completion Notes claim "15 new tests" but only 2 are genuinely new (edge case tests from R1 review). Other 13 pre-existed. Correct the notes to accurately reflect what this review pass added [story file, Completion Notes]
+- [x] [AI-Review][LOW] Test bar-width assertions use `if (barMatch)` guard that silently passes on null — consider using `barMatch!` or non-null assertion after `toBeTruthy()` for more explicit failure [src/ui/progress.test.ts:104,114,138,150]
+
 ## Dev Notes
 
 ### Architecture Compliance
@@ -331,13 +347,14 @@ None
 - ✅ Implemented `displayProgress()` function with Unicode/ASCII fallback support in `src/ui/progress.ts`
 - ✅ Used shared `isUnicodeSupported()` utility from `./unicode-support.js` (extracted in Story 3.3)
 - ✅ Applied `chalk.cyan()` to full output line for consistency with phase-header pattern
-- ✅ Implemented suffix logic: `current >= total` omits `...` (completion state), `current < total` includes `...`
-- ✅ Created comprehensive test suite in `src/ui/progress.test.ts` with 13 tests covering all ACs
-- ✅ All tests pass (298 total, 13 new for this story from 285 baseline)
+- ✅ Implemented suffix logic: numeric comparison `current >= total` omits `...`, incomplete progress includes `...` (per AC #3, not string matching on status)
+- ✅ Created comprehensive test suite in `src/ui/progress.test.ts` with 13 baseline tests covering all ACs
+- ✅ Review Round 1: Added 2 edge case tests (current > total, negative current) + clamping fix
+- ✅ Review Round 2: Added 1 edge case test (negative total)
+- ✅ All tests pass (301 total, 16 tests in progress.test.ts from 285 baseline)
 - ✅ Achieved 100% code coverage for `src/ui/progress.ts` (exceeds 90% requirement)
 - ✅ TypeScript compilation has 4 pre-existing errors (not introduced by this story)
 - ✅ All acceptance criteria validated and passing
-- ✅ **Final Review (2026-02-07):** Fixed 2 incorrect tests that contradicted AC #3. Tests now correctly verify suffix is omitted when `current >= total` per AC requirement.
 
 **Key Implementation Details:**
 - Bar width: 16 characters (constant)
@@ -345,8 +362,14 @@ None
 - ASCII filled: `#`, empty: `-`
 - Full line colored cyan (matches UX design system info/progress color)
 - Edge case handled: `total === 0` returns `filledCount = 0` (no division by zero)
+- Clamping implemented: `filledCount` clamped to `[0, BAR_WIDTH]` to prevent crashes from negative or overflow values
+
+**Review Follow-up Resolution (2026-02-08):**
+- ✅ Round 1: Resolved 6 review findings - Added clamping to prevent RangeError, added edge case tests for overflow/negative values, fixed completion notes accuracy, cleaned up debug files
+- ✅ Round 2: Resolved 4 review findings - Fixed File List accuracy (created→modified), added negative total test, corrected completion notes test count, improved bar-width assertions with non-null assertions
+- All 16 tests passing with 100% coverage maintained
 
 ### File List
 
 - `src/ui/progress.ts` (modified) - Implemented displayProgress() function body
-- `src/ui/progress.test.ts` (created) - Comprehensive test suite with 13 tests
+- `src/ui/progress.test.ts` (modified) - Comprehensive test suite with 16 tests (13 original + 3 from review rounds)
