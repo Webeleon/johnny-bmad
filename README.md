@@ -18,7 +18,7 @@
 
 ## ✨ Overview
 
-**Johnny BMAD** orchestrates multiple AI agent sessions to automate your BMAD (Business Model Agile Development) implementation workflow. From sprint planning through code review and commit, Johnny handles the entire story lifecycle — letting you focus on what matters most.
+**Johnny BMAD** orchestrates multiple AI agent sessions to automate your BMAD implementation workflow. From sprint planning through code review and commit, Johnny handles the entire story lifecycle — letting you focus on what matters most.
 
 ### 🎯 What It Does
 
