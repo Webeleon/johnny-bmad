@@ -102,7 +102,7 @@ describe('ui/index.ts - Barrel Exports', () => {
       expect(typeof promptStoryApproval).toBe('function');
     });
 
-    test('stub should resolve to approved', async () => {
+    test('should be an async function that returns a promise', () => {
       const storyData: StoryCardData = {
         title: 'Test Story',
         epicId: 'epic-1',
@@ -110,8 +110,13 @@ describe('ui/index.ts - Barrel Exports', () => {
         acceptanceCriteria: ['AC1'],
         tasks: ['Task 1'],
       };
-      const result = await promptStoryApproval(storyData, 1, 8);
-      expect(result).toBe('approved');
+      const result = promptStoryApproval(storyData, 1, 8);
+      expect(result).toBeInstanceOf(Promise);
+    });
+
+    test('should accept StoryCardData, index, total, and optional storyPath parameters', () => {
+      // Function signature test - compilation verifies this
+      expect(promptStoryApproval.length).toBe(4); // story, index, total, storyPath?
     });
   });
 
