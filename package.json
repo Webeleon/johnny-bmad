@@ -16,7 +16,7 @@
     "test": "bun test",
     "lint": "biome lint src/",
     "lint:fix": "biome lint --write src/",
-    "format": "biome format --check src/",
+    "format": "biome format src/",
     "format:fix": "biome format --write src/",
     "check": "biome check src/",
     "check:fix": "biome check --write src/",
