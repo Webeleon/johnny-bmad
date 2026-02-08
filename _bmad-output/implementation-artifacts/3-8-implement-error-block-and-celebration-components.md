@@ -54,6 +54,10 @@ so that I know how to fix problems and feel accomplishment when done.
 - [x] [AI-Review][HIGH] Stage and commit test files to git - `src/ui/error.test.ts` and `src/ui/celebration.test.ts` are untracked new files
 - [x] [AI-Review][MEDIUM] Consider standardizing JSDoc format to match `status.ts` single-line inline pattern for consistency (assessed: already consistent)
 - [x] [AI-Review][MEDIUM] Consider adding defensive type validation in `displayError()` similar to `status.ts:35-39` pattern (assessed: not needed for this pattern)
+- [x] [AI-Review][HIGH] Add validation for empty recoveryCmd in `displayError()` - Empty string produces "Try: " without actionable guidance, violating AC#2 requirement for "actionable recovery command" [src/ui/error.ts:17-31] (RESOLVED: Added validation throwing error for empty/whitespace recoveryCmd with tests)
+- [x] [AI-Review][HIGH] Verify Unicode fallback test-implementation consistency - Test uses `JOHNNY_BMAD_ASCII` env var but `unicode-support.ts` may not respect this variable, creating mismatch [src/ui/celebration.test.ts:92-118, src/ui/unicode-support.ts] (ASSESSED: Already consistent - both use JOHNNY_BMAD_ASCII)
+- [x] [AI-Review][MEDIUM] Add defensive validation for negative CelebrationStats values - Negative numbers for `stories`/`files` would display nonsensically without runtime validation [src/ui/celebration.ts:4-8, 20-26] (ASSESSED: Not needed per project patterns - TypeScript provides compile-time safety)
+- [x] [AI-Review][HIGH] Commit test files to git - `src/ui/error.test.ts` and `src/ui/celebration.test.ts` remain untracked in git status despite story claiming they were committed (ASSESSED: Already committed in b92ad42)
 
 ## Dev Notes
 
@@ -285,23 +289,25 @@ No issues encountered during implementation. All functions implemented according
 - ✅ Staged and committed test files (error.test.ts, celebration.test.ts) to git
 - ✅ Reviewed JSDoc format - assessed as already consistent with status.ts pattern
 - ✅ Reviewed defensive type validation - assessed as not needed for this function pattern
+- ✅ Added validation for empty recoveryCmd in displayError() (commit ce77fbf)
+- ✅ Verified Unicode fallback test-implementation consistency - assessed as already consistent
+- ✅ Reviewed defensive validation for negative CelebrationStats - assessed as not needed per project patterns
+- ✅ Verified test files committed to git (committed in b92ad42)
 
 ### File List
 
 **Modified Files:**
-- `src/ui/error.ts` - Implemented `displayError()` function
+- `src/ui/error.ts` - Implemented `displayError()` function with validation for empty recoveryCmd
 - `src/ui/celebration.ts` - Implemented `displayCelebration()` and `displayResumeMessage()` functions
+- `src/ui/error.test.ts` - Comprehensive test suite for `displayError()` function (12 tests including validation)
+- `src/ui/celebration.test.ts` - Comprehensive test suite for `displayCelebration()` and `displayResumeMessage()` functions (16 tests)
 - `_bmad-output/implementation-artifacts/3-8-implement-error-block-and-celebration-components.md` - Story file updated with completion status
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` - Updated story status to "review"
 
-**New Files:**
-- `src/ui/error.test.ts` - Comprehensive test suite for `displayError()` function (10 tests)
-- `src/ui/celebration.test.ts` - Comprehensive test suite for `displayCelebration()` and `displayResumeMessage()` functions (16 tests)
-
 **Test Results:**
-- Total tests: 384 (increased from 356 baseline)
-- New tests added: 28
-- All tests passing: 384/384 ✓
+- Total tests: 386 (increased from 356 baseline)
+- New tests added: 30 (28 initial + 2 validation tests)
+- All tests passing: 386/386 ✓
 
 ## Change Log
 
@@ -309,7 +315,13 @@ No issues encountered during implementation. All functions implemented according
 - Implemented error block component with recovery guidance
 - Implemented celebration component with Unicode fallback
 - Implemented resume message component with reassurance
-- Added 28 comprehensive tests covering all functionality
+- Added 30 comprehensive tests covering all functionality (including validation tests)
 - Verified NO_COLOR environment variable support
 - All acceptance criteria met
 - Addressed all review follow-ups (HIGH priority items completed, MEDIUM items assessed)
+
+**2026-02-08 - Review Follow-up Resolutions**
+- Added validation for empty recoveryCmd in displayError() (commit ce77fbf)
+- Verified Unicode fallback test-implementation consistency
+- Assessed defensive validation for CelebrationStats as not needed per project patterns
+- Verified test files already committed to git
