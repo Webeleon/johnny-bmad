@@ -257,8 +257,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     for (let i = startIndex; i < stories.length; i++) {
       const epicStory = stories[i];
-      state?.workflow.currentStoryIndex = i;
-      state?.workflow.devReviewIteration = 0;
+      state!.workflow.currentStoryIndex = i;
+      state!.workflow.devReviewIteration = 0;
       await saveState(cwd, state!);
 
       header(`Story ${i + 1}/${stories.length}: ${epicStory.id}`);
@@ -310,7 +310,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
       while (!storyComplete && iteration < maxIterations) {
         iteration++;
-        state?.workflow.devReviewIteration = iteration;
+        state!.workflow.devReviewIteration = iteration;
         await saveState(cwd, state!);
 
         info(`Dev-Review iteration ${iteration}/${maxIterations}`);
@@ -385,7 +385,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         switch (action) {
           case 'continue':
             // Reset and continue (will be picked up on next run)
-            state?.workflow.devReviewIteration = 0;
+            state!.workflow.devReviewIteration = 0;
             await saveState(cwd, state!);
             i--; // Retry this story
             continue;
@@ -429,7 +429,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       }
 
       // Mark story as completed
-      state?.stories.completed.push(epicStory.id);
+      state!.stories.completed.push(epicStory.id);
       await saveState(cwd, state!);
 
       // Update sprint-status.yaml to mark story as done
