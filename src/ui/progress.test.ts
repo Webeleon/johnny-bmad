@@ -92,6 +92,50 @@ describe('progress.ts - Progress Bar', () => {
       expect(output).toContain('implementing...');
     });
 
+    test('should have exactly 16 characters in ASCII fallback bar at 50%', () => {
+      process.env.JOHNNY_BMAD_ASCII = '1';
+      displayProgress(4, 8, 'implementing');
+      const output = consoleOutput.join('\n');
+      // Extract the ASCII bar content between [ and ]
+      const barMatch = output.match(/\[([#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      // Verify it's ASCII chars (8 filled # + 8 empty -)
+      expect(barMatch![1]).toBe('########--------');
+    });
+
+    test('should have exactly 16 characters in ASCII bar for non-even division (3/7)', () => {
+      process.env.JOHNNY_BMAD_ASCII = '1';
+      displayProgress(3, 7, 'processing');
+      const output = consoleOutput.join('\n');
+      // Extract ASCII bar with regex matching # and -
+      const barMatch = output.match(/\[([#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      // 3/7 = ~43% → Math.round(0.43 * 16) = 7 filled
+      expect(barMatch![1]).toBe('#######---------');
+    });
+
+    test('should have exactly 16 characters in ASCII bar at 0%', () => {
+      process.env.JOHNNY_BMAD_ASCII = '1';
+      displayProgress(0, 8, 'starting');
+      const output = consoleOutput.join('\n');
+      const barMatch = output.match(/\[([#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('----------------');
+    });
+
+    test('should have exactly 16 characters in ASCII bar at 100%', () => {
+      process.env.JOHNNY_BMAD_ASCII = '1';
+      displayProgress(8, 8, 'complete');
+      const output = consoleOutput.join('\n');
+      const barMatch = output.match(/\[([#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('################');
+    });
+
     test('should have bar width of exactly 16 characters', () => {
       displayProgress(4, 8, 'implementing');
       const output = consoleOutput.join('\n');
@@ -161,31 +205,35 @@ describe('progress.ts - Progress Bar', () => {
       // Force chalk to use color level 3 (truecolor) by setting chalk instance level
       // This ensures ANSI codes are included in output even during testing
       const originalLevel = chalk.level;
-      chalk.level = 3;
-
-      // Capture raw console.log args to preserve ANSI codes
-      let rawArg: unknown;
       const tempLog = console.log;
-      console.log = (arg: unknown) => {
-        rawArg = arg;
-        tempLog(arg);
-      };
+      let rawArg: unknown;
 
-      displayProgress(4, 8, 'implementing');
+      try {
+        chalk.level = 3;
 
-      console.log = tempLog;
-      chalk.level = originalLevel; // Restore
+        // Capture raw console.log args to preserve ANSI codes
+        console.log = (arg: unknown) => {
+          rawArg = arg;
+          tempLog(arg);
+        };
 
-      // Convert to string (preserves ANSI codes when chalk.level=3)
-      const rawString = String(rawArg);
+        displayProgress(4, 8, 'implementing');
 
-      // Verify ANSI cyan escape code (\x1b[36m) is present in raw output
-      // This proves chalk.cyan() wrapper is actually applied at progress.ts:22
-      expect(rawString).toContain('\x1b[36m');
+        // Convert to string (preserves ANSI codes when chalk.level=3)
+        const rawString = String(rawArg);
 
-      // Also verify expected content
-      expect(rawString).toContain('Story 4/8');
-      expect(rawString).toContain('implementing...');
+        // Verify ANSI cyan escape code (\x1b[36m) is present in raw output
+        // This proves chalk.cyan() wrapper is actually applied at progress.ts:22
+        expect(rawString).toContain('\x1b[36m');
+
+        // Also verify expected content
+        expect(rawString).toContain('Story 4/8');
+        expect(rawString).toContain('implementing...');
+      } finally {
+        // Always restore console.log and chalk.level even if test throws
+        console.log = tempLog;
+        chalk.level = originalLevel;
+      }
     });
 
     test('should handle NaN current value without producing broken output', () => {
@@ -198,6 +246,19 @@ describe('progress.ts - Progress Bar', () => {
       expect(barMatch![1].length).toBe(16);
       // With NaN input, should produce all empty bar
       expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+    });
+
+    test('should handle NaN total parameter without crashing', () => {
+      expect(() => displayProgress(4, NaN, 'test')).not.toThrow();
+      const output = consoleOutput.join('\n');
+      expect(output).toContain('Story 4/NaN');
+      // With NaN total: NaN > 0 is false, so bar renders empty
+      const barMatch = output.match(/\[([█░#-]+)\]/);
+      expect(barMatch).toBeTruthy();
+      expect(barMatch![1].length).toBe(16);
+      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      // 4 >= NaN is false, so ... suffix should be present
+      expect(output).toContain('test...');
     });
   });
 });
