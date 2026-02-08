@@ -1,5 +1,13 @@
-import { describe, test, expect } from 'bun:test';
-import type { State, LegacyState, WorkflowMode, WorkflowPhase, StoryApprovalStatus, WorkflowState, StoriesState } from './types.js';
+import { describe, expect, test } from 'bun:test';
+import type {
+  LegacyState,
+  State,
+  StoriesState,
+  StoryApprovalStatus,
+  WorkflowMode,
+  WorkflowPhase,
+  WorkflowState,
+} from './types.js';
 
 describe('types.ts - Type Definitions', () => {
   describe('WorkflowMode type union', () => {
@@ -59,7 +67,7 @@ describe('types.ts - Type Definitions', () => {
         mode: 'sequential',
         phase: 'implementation',
         currentStoryIndex: 0,
-        devReviewIteration: 0
+        devReviewIteration: 0,
       };
 
       expect(workflowState.mode).toBe('sequential');
@@ -74,7 +82,7 @@ describe('types.ts - Type Definitions', () => {
         mode: 'batch',
         phase: 'story-creation',
         currentStoryIndex: 5,
-        devReviewIteration: 2
+        devReviewIteration: 2,
       };
 
       expect(Object.keys(workflowState)).toHaveLength(4);
@@ -88,8 +96,8 @@ describe('types.ts - Type Definitions', () => {
         approvals: {
           'story-1': 'approved',
           'story-2': 'needs-changes',
-          'story-3': 'pending'
-        }
+          'story-3': 'pending',
+        },
       };
 
       expect(storiesState.completed).toHaveLength(2);
@@ -99,7 +107,7 @@ describe('types.ts - Type Definitions', () => {
     test('should accept empty completed array', () => {
       const storiesState: StoriesState = {
         completed: [],
-        approvals: {}
+        approvals: {},
       };
 
       expect(storiesState.completed).toHaveLength(0);
@@ -109,12 +117,12 @@ describe('types.ts - Type Definitions', () => {
     test('should accept approvals as Record', () => {
       const approvals: Record<string, StoryApprovalStatus> = {
         'epic-1-story-1': 'approved',
-        'epic-1-story-2': 'pending'
+        'epic-1-story-2': 'pending',
       };
 
       const storiesState: StoriesState = {
         completed: [],
-        approvals
+        approvals,
       };
 
       expect(storiesState.approvals['epic-1-story-1']).toBe('approved');
@@ -130,12 +138,12 @@ describe('types.ts - Type Definitions', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(state.currentEpic).toBe('epic-1');
@@ -151,15 +159,15 @@ describe('types.ts - Type Definitions', () => {
           mode: 'batch',
           phase: 'review',
           currentStoryIndex: 3,
-          devReviewIteration: 1
+          devReviewIteration: 1,
         },
         stories: {
           completed: ['story-1', 'story-2'],
           approvals: {
             'story-1': 'approved',
-            'story-2': 'approved'
-          }
-        }
+            'story-2': 'approved',
+          },
+        },
       };
 
       // Backward compatible fields should exist at top level
@@ -175,12 +183,12 @@ describe('types.ts - Type Definitions', () => {
           mode: 'dev-only',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(state.workflow).toBeDefined();
@@ -197,7 +205,7 @@ describe('types.ts - Type Definitions', () => {
         currentStoryIndex: 2,
         devReviewIteration: 1,
         completedStories: ['story-1', 'story-2'],
-        lastUpdated: '2026-02-04T00:00:00.000Z'
+        lastUpdated: '2026-02-04T00:00:00.000Z',
       };
 
       expect(legacyState.currentEpic).toBe('epic-1');
@@ -212,7 +220,7 @@ describe('types.ts - Type Definitions', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T00:00:00.000Z'
+        lastUpdated: '2026-02-04T00:00:00.000Z',
       };
 
       // Legacy state should NOT have nested workflow or stories objects
@@ -226,7 +234,7 @@ describe('types.ts - Type Definitions', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T00:00:00.000Z'
+        lastUpdated: '2026-02-04T00:00:00.000Z',
       };
 
       // These field names must match v0.2.0 exactly for migration
@@ -245,7 +253,7 @@ describe('types.ts - Type Definitions', () => {
         currentStoryIndex: 2,
         devReviewIteration: 1,
         completedStories: ['story-1', 'story-2'],
-        lastUpdated: '2026-02-04T00:00:00.000Z'
+        lastUpdated: '2026-02-04T00:00:00.000Z',
       };
 
       // Simulate migration (actual migration logic is in Story 1.2)
@@ -256,12 +264,12 @@ describe('types.ts - Type Definitions', () => {
           mode: 'sequential', // Default for migration
           phase: 'implementation', // Default for migration
           currentStoryIndex: legacyState.currentStoryIndex,
-          devReviewIteration: legacyState.devReviewIteration
+          devReviewIteration: legacyState.devReviewIteration,
         },
         stories: {
           completed: legacyState.completedStories,
-          approvals: {} // New field, empty on migration
-        }
+          approvals: {}, // New field, empty on migration
+        },
       };
 
       expect(migratedState.currentEpic).toBe('epic-1');
@@ -280,12 +288,12 @@ describe('types.ts - Type Definitions', () => {
           mode: 'sequential', // Must be one of the three valid modes
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       // TypeScript would prevent: mode: 'invalid-mode'
@@ -300,12 +308,12 @@ describe('types.ts - Type Definitions', () => {
           mode: 'sequential',
           phase: 'story-creation', // Must be one of the three valid phases
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       // TypeScript would prevent: phase: 'invalid-phase'
@@ -320,19 +328,21 @@ describe('types.ts - Type Definitions', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
           approvals: {
             'story-1': 'approved', // Must be one of the three valid statuses
-            'story-2': 'pending'
-          }
-        }
+            'story-2': 'pending',
+          },
+        },
       };
 
       // TypeScript would prevent: approvals: { 'story-1': 'invalid-status' }
-      expect(['approved', 'needs-changes', 'pending']).toContain(state.stories.approvals['story-1']);
+      expect(['approved', 'needs-changes', 'pending']).toContain(
+        state.stories.approvals['story-1']
+      );
     });
   });
 });

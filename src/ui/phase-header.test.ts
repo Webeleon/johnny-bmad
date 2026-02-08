@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { displayPhaseHeader } from './phase-header.js';
 
 describe('phase-header.ts - Phase Header', () => {

@@ -1,12 +1,12 @@
-import { Transform } from 'stream';
+import { Transform } from 'node:stream';
 import chalk from 'chalk';
 
 // Color mapping for agent roles
 const AGENT_COLORS: Record<string, (text: string) => string> = {
-  'SM': chalk.cyan,
+  SM: chalk.cyan,
   'Story Creator': chalk.magenta,
-  'Dev': chalk.blue,
-  'Review': chalk.yellow,
+  Dev: chalk.blue,
+  Review: chalk.yellow,
 };
 
 /**
@@ -24,7 +24,7 @@ export function createLabeledStream(
   let lineBuffer = '';
 
   return new Transform({
-    transform(chunk, encoding, callback) {
+    transform(chunk, _encoding, callback) {
       const text = chunk.toString();
       lineBuffer += text;
 
@@ -33,7 +33,7 @@ export function createLabeledStream(
       lineBuffer = lines.pop() || ''; // Keep incomplete line in buffer
 
       for (const line of lines) {
-        const prefixed = prefix + line + '\n';
+        const prefixed = `${prefix + line}\n`;
         originalStream.write(prefixed);
       }
 
@@ -42,10 +42,10 @@ export function createLabeledStream(
     flush(callback) {
       // Write any remaining buffer
       if (lineBuffer) {
-        const prefixed = prefix + lineBuffer + '\n';
+        const prefixed = `${prefix + lineBuffer}\n`;
         originalStream.write(prefixed);
       }
       callback();
-    }
+    },
   });
 }

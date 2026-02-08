@@ -1,7 +1,7 @@
-import { readFile, writeFile, rename, unlink } from 'fs/promises';
-import { join } from 'path';
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import inquirer from 'inquirer';
-import type { State, LegacyState, WorkflowMode, WorkflowPhase } from './types.js';
+import type { LegacyState, State, WorkflowMode, WorkflowPhase } from './types.js';
 import { debug, warn } from './utils/logger.js';
 
 const STATE_FILE = '.johnny-bmad-state.json';
@@ -35,7 +35,10 @@ export class NonInteractiveError extends Error {
  * TC39 Stage 3 PermissionError proposal (future Node.js global)
  */
 export class StatePermissionError extends Error {
-  constructor(message: string, public readonly recovery: string) {
+  constructor(
+    message: string,
+    public readonly recovery: string
+  ) {
     super(message);
     this.name = 'StatePermissionError';
   }
@@ -115,7 +118,8 @@ export function isHybridState(obj: unknown): boolean {
 
   const state = obj as Record<string, unknown>;
 
-  const hasV0Fields = 'completedStories' in state || 'currentStoryIndex' in state || 'devReviewIteration' in state;
+  const hasV0Fields =
+    'completedStories' in state || 'currentStoryIndex' in state || 'devReviewIteration' in state;
   const hasV1Fields = 'workflow' in state || 'stories' in state;
 
   // Hybrid state: has BOTH v0.2.0 AND v1+ fields
@@ -144,7 +148,7 @@ function hasValidTopLevelFields(obj: Record<string, unknown>): boolean {
   // Validate lastUpdated is a parseable date string
   // Prevents propagating/migrating invalid timestamps
   // Note: Date.parse() accepts many formats, not just ISO 8601
-  if (isNaN(Date.parse(obj.lastUpdated))) return false;
+  if (Number.isNaN(Date.parse(obj.lastUpdated))) return false;
 
   return true;
 }
@@ -165,12 +169,16 @@ export function isValidState(obj: unknown): obj is State {
   if (isHybridState(obj)) return false;
 
   // Check workflow object (reject arrays)
-  if (!state.workflow || typeof state.workflow !== 'object' || Array.isArray(state.workflow)) return false;
+  if (!state.workflow || typeof state.workflow !== 'object' || Array.isArray(state.workflow))
+    return false;
   const workflow = state.workflow as Record<string, unknown>;
   if (!['sequential', 'batch', 'dev-only'].includes(workflow.mode as string)) return false;
-  if (!['story-creation', 'review', 'implementation'].includes(workflow.phase as string)) return false;
-  if (!Number.isInteger(workflow.currentStoryIndex) || (workflow.currentStoryIndex as number) < 0) return false;
-  if (!Number.isInteger(workflow.devReviewIteration) || (workflow.devReviewIteration as number) < 0) return false;
+  if (!['story-creation', 'review', 'implementation'].includes(workflow.phase as string))
+    return false;
+  if (!Number.isInteger(workflow.currentStoryIndex) || (workflow.currentStoryIndex as number) < 0)
+    return false;
+  if (!Number.isInteger(workflow.devReviewIteration) || (workflow.devReviewIteration as number) < 0)
+    return false;
 
   // Check stories object
   if (!state.stories || typeof state.stories !== 'object') return false;
@@ -178,10 +186,16 @@ export function isValidState(obj: unknown): obj is State {
   if (!Array.isArray(stories.completed)) return false;
 
   // Validate all completed array elements are non-empty strings
-  if (!stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) return false;
+  if (!stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== ''))
+    return false;
 
   // Check stories.approvals is a plain object (reject arrays)
-  if (!stories.approvals || typeof stories.approvals !== 'object' || Array.isArray(stories.approvals)) return false;
+  if (
+    !stories.approvals ||
+    typeof stories.approvals !== 'object' ||
+    Array.isArray(stories.approvals)
+  )
+    return false;
 
   // Validate stories.approvals values are valid StoryApprovalStatus
   const approvals = stories.approvals as Record<string, unknown>;
@@ -206,12 +220,17 @@ export function isLegacyState(obj: unknown): obj is LegacyState {
   if (!hasValidTopLevelFields(state)) return false;
 
   // Check numeric fields (non-negative integers)
-  if (!Number.isInteger(state.currentStoryIndex) || (state.currentStoryIndex as number) < 0) return false;
-  if (!Number.isInteger(state.devReviewIteration) || (state.devReviewIteration as number) < 0) return false;
+  if (!Number.isInteger(state.currentStoryIndex) || (state.currentStoryIndex as number) < 0)
+    return false;
+  if (!Number.isInteger(state.devReviewIteration) || (state.devReviewIteration as number) < 0)
+    return false;
 
   // Check array field - validate all elements are non-empty strings (matching isValidState consistency)
   if (!Array.isArray(state.completedStories)) return false;
-  if (!state.completedStories.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) return false;
+  if (
+    !state.completedStories.every((item: unknown) => typeof item === 'string' && item.trim() !== '')
+  )
+    return false;
 
   // Ensure it's NOT v1 structure (no nested workflow/stories objects) using shared helper
   if (isHybridState(obj)) return false;
@@ -257,14 +276,14 @@ export function migrateV0toV1(legacyState: LegacyState): State {
       mode: DEFAULT_WORKFLOW_MODE, // Default to sequential mode for backward compatibility
       phase: DEFAULT_WORKFLOW_PHASE, // Default to implementation phase
       currentStoryIndex: legacyState.currentStoryIndex,
-      devReviewIteration: legacyState.devReviewIteration
+      devReviewIteration: legacyState.devReviewIteration,
     },
 
     // Map to stories object
     stories: {
       completed: [...legacyState.completedStories], // Defensive copy to prevent unintended mutations
-      approvals: {} // Default to empty approvals
-    }
+      approvals: {}, // Default to empty approvals
+    },
   };
 }
 
@@ -291,10 +310,7 @@ export function migrateV0toV1(legacyState: LegacyState): State {
  * }
  * ```
  */
-export async function promptMigration(
-  legacyState: LegacyState,
-  cwd: string
-): Promise<State> {
+export async function promptMigration(legacyState: LegacyState, cwd: string): Promise<State> {
   // Proactive TTY check - safer than fragile string matching on error messages
   // Inquirer error messages have no API contract, so we check stdin.isTTY first
   if (!process.stdin.isTTY) {
@@ -313,14 +329,16 @@ export async function promptMigration(
         type: 'confirm',
         name: 'confirmed',
         message: 'Migrate state file to v1 format?',
-        default: true
-      }
+        default: true,
+      },
     ]);
     confirmed = response.confirmed;
   } catch (error) {
     // Unexpected error during prompt (not non-interactive since we checked TTY above)
     // Per project-context.md Rule 5: Error messages must include recovery
-    warn(`Unexpected error during migration prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn(
+      `Unexpected error during migration prompt: ${error instanceof Error ? error.message : String(error)}`
+    );
     warn('Try: Delete .johnny-bmad-state.json to start fresh');
     throw error; // Propagate unexpected errors
   }
@@ -350,7 +368,7 @@ export async function promptMigration(
     // This ensures in-memory state matches disk state (no timestamp drift)
     const stateWithDiskTimestamp: State = {
       ...migrated,
-      lastUpdated: writtenTimestamp
+      lastUpdated: writtenTimestamp,
     };
 
     // Defensive validation: ensure returned state is valid after timestamp spread
@@ -396,10 +414,7 @@ export async function promptMigration(
  * // recovered.workflow.mode === 'sequential' (default)
  * ```
  */
-export async function attemptPartialRecovery(
-  parsed: unknown,
-  cwd: string
-): Promise<State | null> {
+export async function attemptPartialRecovery(parsed: unknown, cwd: string): Promise<State | null> {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     // Cannot recover from non-object - fall through to corrupt prompt
     return await promptCorruptRecovery(cwd);
@@ -429,7 +444,7 @@ export async function attemptPartialRecovery(
   }
 
   // Try to recover lastUpdated
-  if (typeof obj.lastUpdated === 'string' && !isNaN(Date.parse(obj.lastUpdated))) {
+  if (typeof obj.lastUpdated === 'string' && !Number.isNaN(Date.parse(obj.lastUpdated))) {
     recovered.lastUpdated = obj.lastUpdated;
   } else {
     lost.push('lastUpdated');
@@ -444,27 +459,44 @@ export async function attemptPartialRecovery(
   if (obj.workflow && typeof obj.workflow === 'object' && !Array.isArray(obj.workflow)) {
     const workflow = obj.workflow as Record<string, unknown>;
 
-    if (typeof workflow.mode === 'string' && ['sequential', 'batch', 'dev-only'].includes(workflow.mode)) {
+    if (
+      typeof workflow.mode === 'string' &&
+      ['sequential', 'batch', 'dev-only'].includes(workflow.mode)
+    ) {
       recoveredMode = workflow.mode as WorkflowMode;
     }
-    if (typeof workflow.phase === 'string' && ['story-creation', 'review', 'implementation'].includes(workflow.phase)) {
+    if (
+      typeof workflow.phase === 'string' &&
+      ['story-creation', 'review', 'implementation'].includes(workflow.phase)
+    ) {
       recoveredPhase = workflow.phase as WorkflowPhase;
     }
-    if (Number.isInteger(workflow.currentStoryIndex) && (workflow.currentStoryIndex as number) >= 0) {
+    if (
+      Number.isInteger(workflow.currentStoryIndex) &&
+      (workflow.currentStoryIndex as number) >= 0
+    ) {
       recoveredStoryIndex = workflow.currentStoryIndex as number;
     }
-    if (Number.isInteger(workflow.devReviewIteration) && (workflow.devReviewIteration as number) >= 0) {
+    if (
+      Number.isInteger(workflow.devReviewIteration) &&
+      (workflow.devReviewIteration as number) >= 0
+    ) {
       recoveredIteration = workflow.devReviewIteration as number;
     }
   }
 
-  const workflowRecovered = !!(recoveredMode || recoveredPhase || recoveredStoryIndex !== undefined || recoveredIteration !== undefined);
+  const workflowRecovered = !!(
+    recoveredMode ||
+    recoveredPhase ||
+    recoveredStoryIndex !== undefined ||
+    recoveredIteration !== undefined
+  );
   if (workflowRecovered) {
     recovered.workflow = {
       mode: recoveredMode,
       phase: recoveredPhase,
       currentStoryIndex: recoveredStoryIndex,
-      devReviewIteration: recoveredIteration
+      devReviewIteration: recoveredIteration,
     };
   } else {
     lost.push('workflow');
@@ -477,17 +509,27 @@ export async function attemptPartialRecovery(
   if (obj.stories && typeof obj.stories === 'object' && !Array.isArray(obj.stories)) {
     const stories = obj.stories as Record<string, unknown>;
 
-    if (Array.isArray(stories.completed) && stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')) {
-      recoveredCompleted = [...stories.completed as string[]]; // Defensive copy to prevent downstream mutation
+    if (
+      Array.isArray(stories.completed) &&
+      stories.completed.every((item: unknown) => typeof item === 'string' && item.trim() !== '')
+    ) {
+      recoveredCompleted = [...(stories.completed as string[])]; // Defensive copy to prevent downstream mutation
     }
-    if (stories.approvals && typeof stories.approvals === 'object' && !Array.isArray(stories.approvals)) {
+    if (
+      stories.approvals &&
+      typeof stories.approvals === 'object' &&
+      !Array.isArray(stories.approvals)
+    ) {
       const approvals = stories.approvals as Record<string, unknown>;
       const validStatuses = ['approved', 'needs-changes', 'pending'];
-      const allValid = Object.values(approvals).every((status: unknown) =>
-        typeof status === 'string' && validStatuses.includes(status)
+      const allValid = Object.values(approvals).every(
+        (status: unknown) => typeof status === 'string' && validStatuses.includes(status)
       );
       if (allValid) {
-        recoveredApprovals = { ...approvals } as Record<string, 'approved' | 'needs-changes' | 'pending'>; // Defensive copy
+        recoveredApprovals = { ...approvals } as Record<
+          string,
+          'approved' | 'needs-changes' | 'pending'
+        >; // Defensive copy
       }
     }
   }
@@ -496,7 +538,7 @@ export async function attemptPartialRecovery(
   if (storiesRecovered) {
     recovered.stories = {
       completed: recoveredCompleted,
-      approvals: recoveredApprovals
+      approvals: recoveredApprovals,
     };
   } else {
     lost.push('stories');
@@ -509,7 +551,7 @@ export async function attemptPartialRecovery(
   }
 
   // Display what was recovered vs lost
-  const recoveredFields = Object.keys(recovered).filter(key => {
+  const recoveredFields = Object.keys(recovered).filter((key) => {
     const val = recovered[key as keyof typeof recovered];
     return val !== undefined;
   });
@@ -535,12 +577,14 @@ export async function attemptPartialRecovery(
         type: 'confirm',
         name: 'accept',
         message: 'Accept partial recovery with defaults for missing fields?',
-        default: true
-      }
+        default: true,
+      },
     ]);
     accept = response.accept;
   } catch (error) {
-    warn(`Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn(
+      `Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`
+    );
     warn('Try: Delete .johnny-bmad-state.json to start fresh');
     throw error;
   }
@@ -559,12 +603,12 @@ export async function attemptPartialRecovery(
       mode: recovered.workflow?.mode ?? DEFAULT_WORKFLOW_MODE,
       phase: recovered.workflow?.phase ?? DEFAULT_WORKFLOW_PHASE,
       currentStoryIndex: recovered.workflow?.currentStoryIndex ?? 0,
-      devReviewIteration: recovered.workflow?.devReviewIteration ?? 0
+      devReviewIteration: recovered.workflow?.devReviewIteration ?? 0,
     },
     stories: {
       completed: recovered.stories?.completed ?? [],
-      approvals: recovered.stories?.approvals ?? {}
-    }
+      approvals: recovered.stories?.approvals ?? {},
+    },
   };
 
   // Save recovered state using atomic write and get disk timestamp
@@ -583,7 +627,7 @@ export async function attemptPartialRecovery(
   // Return the saved state with disk timestamp (avoid re-reading from disk)
   const stateWithDiskTimestamp: State = {
     ...completeState,
-    lastUpdated: writtenTimestamp
+    lastUpdated: writtenTimestamp,
   };
 
   // Defensive validation: ensure returned state is valid after timestamp spread
@@ -646,15 +690,17 @@ export async function promptCorruptRecovery(cwd: string): Promise<null> {
         message: 'Corrupt state file detected. Choose recovery option:',
         choices: [
           { name: '1. Delete and start fresh', value: '1' },
-          { name: '2. Exit and fix manually', value: '2' }
-        ]
-      }
+          { name: '2. Exit and fix manually', value: '2' },
+        ],
+      },
     ]);
     option = response.option;
   } catch (error) {
     // Unexpected error during prompt (not non-interactive since we checked TTY above)
     // Per project-context.md Rule 5: Error messages must include recovery
-    warn(`Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`);
+    warn(
+      `Unexpected error during recovery prompt: ${error instanceof Error ? error.message : String(error)}`
+    );
     warn('Try: Delete .johnny-bmad-state.json to start fresh');
     throw error; // Propagate unexpected errors
   }
@@ -683,7 +729,7 @@ export async function loadState(cwd: string): Promise<State | null> {
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);
-    } catch (parseError) {
+    } catch (_parseError) {
       debug(`State file corrupted: invalid JSON at ${statePath}`);
       // Offer interactive recovery instead of silent null return
       return await promptCorruptRecovery(cwd);
@@ -767,7 +813,7 @@ export async function saveState(cwd: string, state: State): Promise<string> {
   const timestamp = new Date().toISOString();
   const toSave: State = {
     ...state,
-    lastUpdated: timestamp
+    lastUpdated: timestamp,
   };
 
   // Atomic write: write to .tmp file, then rename (Rule 8 from project-context.md)
@@ -784,7 +830,8 @@ export async function saveState(cwd: string, state: State): Promise<string> {
       debug(`Cleaned up orphaned temp file: ${tmpPath}`);
     } catch (unlinkError) {
       // Best effort cleanup - distinguish ENOENT (no temp file exists) from genuine failures
-      const isENOENT = unlinkError instanceof Error && 'code' in unlinkError && unlinkError.code === 'ENOENT';
+      const isENOENT =
+        unlinkError instanceof Error && 'code' in unlinkError && unlinkError.code === 'ENOENT';
       if (isENOENT) {
         debug(`No temp file to cleanup (writeFile likely failed before creating ${tmpPath})`);
       } else {
@@ -804,12 +851,12 @@ export function createInitialState(epicId: string): State {
       mode: DEFAULT_WORKFLOW_MODE,
       phase: DEFAULT_WORKFLOW_PHASE,
       currentStoryIndex: 0,
-      devReviewIteration: 0
+      devReviewIteration: 0,
     },
     stories: {
       completed: [],
-      approvals: {}
-    }
+      approvals: {},
+    },
   };
 }
 

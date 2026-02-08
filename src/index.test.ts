@@ -1,6 +1,6 @@
-import { describe, test, expect, spyOn } from 'bun:test';
-import { formatErrorWithRecovery, parseArgs, showHelp, main, validateFlags } from './index.js';
-import { StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { CorruptStateError, MigrationSaveError, StatePermissionError } from './config.js';
+import { formatErrorWithRecovery, main, parseArgs, showHelp, validateFlags } from './index.js';
 
 describe('index.ts - Error Handling', () => {
   describe('formatErrorWithRecovery()', () => {
@@ -21,7 +21,9 @@ describe('index.ts - Error Handling', () => {
       const result = formatErrorWithRecovery(eaccesError);
 
       expect(result.message).toBe('[ERROR] Operation failed: permission denied');
-      expect(result.recovery).toBe('        Try: Check file permissions or run with appropriate access rights');
+      expect(result.recovery).toBe(
+        '        Try: Check file permissions or run with appropriate access rights'
+      );
     });
 
     test('should format generic filesystem error with generic recovery guidance', () => {
@@ -51,7 +53,9 @@ describe('index.ts - Error Handling', () => {
 
       const result = formatErrorWithRecovery(error);
 
-      expect(result.message).toBe('[ERROR] Permission denied reading state file at /path/to/state.json');
+      expect(result.message).toBe(
+        '[ERROR] Permission denied reading state file at /path/to/state.json'
+      );
       expect(result.recovery).toBe('        Try: chmod 644 .johnny-bmad-state.json');
     });
 
@@ -64,7 +68,9 @@ describe('index.ts - Error Handling', () => {
       const result = formatErrorWithRecovery(error);
 
       expect(result.message).toBe('[ERROR] Migration completed but failed to save new state file');
-      expect(result.recovery).toBe('        Try: Fix disk/permissions and restart to retry migration');
+      expect(result.recovery).toBe(
+        '        Try: Fix disk/permissions and restart to retry migration'
+      );
     });
 
     test('should format non-Error thrown values as strings', () => {
@@ -101,7 +107,9 @@ describe('index.ts - Error Handling', () => {
       const result = formatErrorWithRecovery(error);
 
       // Should get generic error formatting (since CorruptStateError doesn't have recovery property)
-      expect(result.message).toBe('[ERROR] Fatal error: Corrupt state file - user chose to fix manually');
+      expect(result.message).toBe(
+        '[ERROR] Fatal error: Corrupt state file - user chose to fix manually'
+      );
       expect(result.recovery).toBe('        Try: Run johnny-bmad again to resume from saved state');
     });
   });
@@ -256,7 +264,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify --batch flag is documented
         expect(helpOutput).toContain('--batch');
@@ -272,7 +280,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify --dev-only flag is documented
         expect(helpOutput).toContain('--dev-only');
@@ -288,7 +296,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify examples section includes new flags
         expect(helpOutput).toContain('npx johnny-bmad --batch');
@@ -303,7 +311,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify --batch --yolo example is included
         expect(helpOutput).toContain('npx johnny-bmad --batch --yolo');
@@ -318,7 +326,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify documentation link is included
         expect(helpOutput).toContain('Documentation: https://github.com/webeleon/johnny-bmad');
@@ -332,7 +340,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify default workflow example comment
         expect(helpOutput).toContain('Start sequential workflow (default)');
@@ -346,7 +354,7 @@ describe('index.ts - Argument Parsing', () => {
       try {
         showHelp();
 
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
 
         // Verify existing flags are preserved
         expect(helpOutput).toContain('--resume');
@@ -371,15 +379,25 @@ describe('index.ts - Argument Parsing', () => {
       }) as any);
 
       try {
-        expect(() => validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true }))
-          .toThrow('process.exit called');
+        expect(() =>
+          validateFlags({
+            resume: false,
+            help: false,
+            verbose: false,
+            yolo: false,
+            batch: true,
+            devOnly: true,
+          })
+        ).toThrow('process.exit called');
 
         expect(exitSpy).toHaveBeenCalledWith(1);
 
         // Verify error message
         const errorCalls = errorSpy.mock.calls.flat().join('\n');
         expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
-        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+        expect(errorCalls).toContain(
+          'Try: Use --batch to create stories, then --dev-only to implement'
+        );
       } finally {
         errorSpy.mockRestore();
         exitSpy.mockRestore();
@@ -409,7 +427,14 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when only --batch is set', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          batch: true,
+          devOnly: false,
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -419,7 +444,14 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when only --dev-only is set', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: true });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          batch: false,
+          devOnly: true,
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -429,7 +461,14 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when --batch and --yolo are used together', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: true,
+          batch: true,
+          devOnly: false,
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -439,7 +478,14 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when --dev-only and --yolo are used together', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: false, devOnly: true });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: true,
+          batch: false,
+          devOnly: true,
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -449,7 +495,14 @@ describe('index.ts - Argument Parsing', () => {
     test('should not exit when no flags are set (default/sequential path)', () => {
       const exitSpy = spyOn(process, 'exit').mockImplementation((() => {}) as any);
       try {
-        validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: false, devOnly: false });
+        validateFlags({
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          batch: false,
+          devOnly: false,
+        });
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -464,7 +517,14 @@ describe('index.ts - Argument Parsing', () => {
 
       try {
         expect(() => {
-          validateFlags({ resume: false, help: false, verbose: false, yolo: true, batch: true, devOnly: true });
+          validateFlags({
+            resume: false,
+            help: false,
+            verbose: false,
+            yolo: true,
+            batch: true,
+            devOnly: true,
+          });
         }).toThrow('process.exit called');
 
         // Mutual exclusion takes priority over yolo
@@ -486,14 +546,23 @@ describe('index.ts - Argument Parsing', () => {
 
       try {
         expect(() => {
-          validateFlags({ resume: false, help: false, verbose: false, yolo: false, batch: true, devOnly: true });
+          validateFlags({
+            resume: false,
+            help: false,
+            verbose: false,
+            yolo: false,
+            batch: true,
+            devOnly: true,
+          });
         }).toThrow('process.exit called');
 
         // Verify exact message strings including whitespace formatting
         const errorCalls = errorSpy.mock.calls;
         expect(errorCalls.length).toBe(2);
         expect(errorCalls[0][0]).toBe('[ERROR] Cannot use --batch and --dev-only together');
-        expect(errorCalls[1][0]).toBe('        Try: Use --batch to create stories, then --dev-only to implement');
+        expect(errorCalls[1][0]).toBe(
+          '        Try: Use --batch to create stories, then --dev-only to implement'
+        );
       } finally {
         errorSpy.mockRestore();
         exitSpy.mockRestore();
@@ -518,7 +587,7 @@ describe('index.ts - Argument Parsing', () => {
 
         // Verify showHelp() was called (console.log was invoked)
         expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
-        const helpOutput = consoleSpy.mock.calls.map(call => call[0]).join('\n');
+        const helpOutput = consoleSpy.mock.calls.map((call) => call[0]).join('\n');
         expect(helpOutput).toContain('johnny-bmad');
         expect(helpOutput).toContain('Options:');
 
@@ -548,7 +617,9 @@ describe('index.ts - Argument Parsing', () => {
         // Verify error message was displayed
         const errorCalls = errorSpy.mock.calls.flat().join('\n');
         expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
-        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+        expect(errorCalls).toContain(
+          'Try: Use --batch to create stories, then --dev-only to implement'
+        );
 
         // Verify process.exit(1) was called
         expect(exitSpy).toHaveBeenCalledWith(1);
@@ -577,7 +648,9 @@ describe('index.ts - Argument Parsing', () => {
         // Verify error message was displayed (not help text)
         const errorCalls = errorSpy.mock.calls.flat().join('\n');
         expect(errorCalls).toContain('[ERROR] Cannot use --batch and --dev-only together');
-        expect(errorCalls).toContain('Try: Use --batch to create stories, then --dev-only to implement');
+        expect(errorCalls).toContain(
+          'Try: Use --batch to create stories, then --dev-only to implement'
+        );
 
         // Verify help text was NOT displayed (console.log should not have been called)
         expect(logSpy).not.toHaveBeenCalled();

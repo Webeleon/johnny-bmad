@@ -1,16 +1,13 @@
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 import type { ClaudeOptions, ClaudeResult } from '../types.js';
-import { debug, isVerbose, agentLifecycle } from '../utils/logger.js';
+import { agentLifecycle, debug, isVerbose } from '../utils/logger.js';
 import { createLabeledStream } from '../utils/stream-wrapper.js';
 
 export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
 
-    const args: string[] = [
-      '--model', opts.model,
-      '-p', opts.prompt
-    ];
+    const args: string[] = ['--model', opts.model, '-p', opts.prompt];
 
     if (opts.allowedTools && opts.allowedTools.length > 0) {
       args.push('--allowedTools', opts.allowedTools.join(','));
@@ -32,7 +29,7 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
     // (which would swallow Ctrl+C). The -p flag + --allowedTools make stdin unnecessary.
     const proc = spawn('claude', args, {
       cwd: opts.cwd,
-      stdio: useLabeled ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'inherit', 'inherit']
+      stdio: useLabeled ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'inherit', 'inherit'],
     });
 
     // Close stdin immediately - child doesn't need it in -p mode
@@ -54,7 +51,7 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
       proc.stderr.pipe(stderrStream);
     }
 
-    proc.on('close', (code, signal) => {
+    proc.on('close', (code, _signal) => {
       // Clean up signal handlers
       process.removeListener('SIGINT', onSignal);
       process.removeListener('SIGTERM', onSignal);
@@ -87,7 +84,7 @@ export function spawnClaude(opts: ClaudeOptions): Promise<ClaudeResult> {
 export function checkClaudeInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = spawn('claude', ['--version'], {
-      stdio: 'pipe'
+      stdio: 'pipe',
     });
 
     proc.on('close', (code) => {

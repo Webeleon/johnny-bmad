@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test';
-import { findOngoingWork, getAllStoriesForEpic } from './files.js';
+import { describe, expect, test } from 'bun:test';
 import type { SprintStatus } from '../types.js';
+import { findOngoingWork, getAllStoriesForEpic } from './files.js';
 
 describe('findOngoingWork', () => {
   test('returns null when no sprint status', () => {
@@ -13,7 +13,7 @@ describe('findOngoingWork', () => {
       project: 'test',
       tracking_system: 'file-system',
       story_location: '_bmad-output/implementation-artifacts',
-      development_status: {}
+      development_status: {},
     };
     expect(findOngoingWork(status)).toBeNull();
   });
@@ -27,14 +27,14 @@ describe('findOngoingWork', () => {
       development_status: {
         'epic-1': 'in-progress',
         '1-1-story-one': 'in-progress',
-        '1-2-story-two': 'done'
-      }
+        '1-2-story-two': 'done',
+      },
     };
     const result = findOngoingWork(status);
     expect(result).not.toBeNull();
-    expect(result!.epicId).toBe('epic-1');
-    expect(result!.stories).toHaveLength(1);
-    expect(result!.stories[0].id).toBe('1-1-story-one');
+    expect(result?.epicId).toBe('epic-1');
+    expect(result?.stories).toHaveLength(1);
+    expect(result?.stories[0].id).toBe('1-1-story-one');
   });
 
   test('returns epic with actionable stories (ready-for-dev)', () => {
@@ -46,14 +46,14 @@ describe('findOngoingWork', () => {
       development_status: {
         'epic-2': 'in-progress',
         '2-1-story-one': 'done',
-        '2-2-story-two': 'ready-for-dev'
-      }
+        '2-2-story-two': 'ready-for-dev',
+      },
     };
     const result = findOngoingWork(status);
     expect(result).not.toBeNull();
-    expect(result!.epicId).toBe('epic-2');
-    expect(result!.stories).toHaveLength(1);
-    expect(result!.stories[0].id).toBe('2-2-story-two');
+    expect(result?.epicId).toBe('epic-2');
+    expect(result?.stories).toHaveLength(1);
+    expect(result?.stories[0].id).toBe('2-2-story-two');
   });
 
   test('returns epic with backlog stories as actionable', () => {
@@ -67,15 +67,15 @@ describe('findOngoingWork', () => {
         'epic-8': 'in-progress',
         '8-1-pool-change-feedback': 'done',
         '8-2-pool-reset-function': 'backlog',
-        '8-3-pool-resize-function': 'backlog'
-      }
+        '8-3-pool-resize-function': 'backlog',
+      },
     };
     const result = findOngoingWork(status);
     expect(result).not.toBeNull();
-    expect(result!.epicId).toBe('epic-8');
-    expect(result!.stories).toHaveLength(2); // backlog stories are now actionable
-    expect(result!.stories.map(s => s.id)).toContain('8-2-pool-reset-function');
-    expect(result!.stories.map(s => s.id)).toContain('8-3-pool-resize-function');
+    expect(result?.epicId).toBe('epic-8');
+    expect(result?.stories).toHaveLength(2); // backlog stories are now actionable
+    expect(result?.stories.map((s) => s.id)).toContain('8-2-pool-reset-function');
+    expect(result?.stories.map((s) => s.id)).toContain('8-3-pool-resize-function');
   });
 
   test('returns null when epic and all stories are done', () => {
@@ -88,8 +88,8 @@ describe('findOngoingWork', () => {
       development_status: {
         'epic-1': 'done',
         '1-1-story-one': 'done',
-        '1-2-story-two': 'done'
-      }
+        '1-2-story-two': 'done',
+      },
     };
     const result = findOngoingWork(status);
     expect(result).toBeNull();
@@ -102,13 +102,13 @@ describe('findOngoingWork', () => {
       tracking_system: 'file-system',
       story_location: '_bmad-output/implementation-artifacts',
       development_status: {
-        '3-1-story-one': 'in-progress'
-      }
+        '3-1-story-one': 'in-progress',
+      },
     };
     const result = findOngoingWork(status);
     expect(result).not.toBeNull();
-    expect(result!.epicId).toBe('epic-3');
-    expect(result!.stories).toHaveLength(1);
+    expect(result?.epicId).toBe('epic-3');
+    expect(result?.stories).toHaveLength(1);
   });
 });
 
@@ -129,14 +129,14 @@ describe('getAllStoriesForEpic', () => {
         '8-2-pool-reset-function': 'backlog',
         '8-3-pool-resize-function': 'backlog',
         'epic-9': 'backlog',
-        '9-1-other-story': 'backlog'
-      }
+        '9-1-other-story': 'backlog',
+      },
     };
     const result = getAllStoriesForEpic(status, 'epic-8');
     expect(result).toHaveLength(3);
-    expect(result.map(s => s.id)).toContain('8-1-pool-change-feedback');
-    expect(result.map(s => s.id)).toContain('8-2-pool-reset-function');
-    expect(result.map(s => s.id)).toContain('8-3-pool-resize-function');
+    expect(result.map((s) => s.id)).toContain('8-1-pool-change-feedback');
+    expect(result.map((s) => s.id)).toContain('8-2-pool-reset-function');
+    expect(result.map((s) => s.id)).toContain('8-3-pool-resize-function');
   });
 
   test('does not include stories from other epics', () => {
@@ -148,12 +148,12 @@ describe('getAllStoriesForEpic', () => {
       development_status: {
         '1-1-story': 'done',
         '1-2-story': 'backlog',
-        '2-1-story': 'backlog'
-      }
+        '2-1-story': 'backlog',
+      },
     };
     const result = getAllStoriesForEpic(status, 'epic-1');
     expect(result).toHaveLength(2);
-    expect(result.map(s => s.id)).not.toContain('2-1-story');
+    expect(result.map((s) => s.id)).not.toContain('2-1-story');
   });
 
   test('excludes epic entries from results', () => {
@@ -164,8 +164,8 @@ describe('getAllStoriesForEpic', () => {
       story_location: '_bmad-output/implementation-artifacts',
       development_status: {
         'epic-5': 'in-progress',
-        '5-1-story': 'in-progress'
-      }
+        '5-1-story': 'in-progress',
+      },
     };
     const result = getAllStoriesForEpic(status, 'epic-5');
     expect(result).toHaveLength(1);

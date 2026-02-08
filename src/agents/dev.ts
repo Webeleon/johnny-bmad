@@ -1,6 +1,6 @@
 import { spawnClaude } from '../claude/cli.js';
 import { getDevStoryPrompt } from '../claude/prompts.js';
-import { info, subHeader, infoWithTiming } from '../utils/logger.js';
+import { info, infoWithTiming, subHeader } from '../utils/logger.js';
 
 export async function runDevAgent(
   cwd: string,
@@ -15,7 +15,7 @@ export async function runDevAgent(
     prompt: getDevStoryPrompt(storyId, storyFilePath),
     cwd,
     allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-    agentRole: 'Dev'
+    agentRole: 'Dev',
   });
 
   infoWithTiming('Dev agent completed', durationMs);

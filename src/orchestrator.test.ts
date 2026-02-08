@@ -1,11 +1,11 @@
-import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import * as claudeCli from './claude/cli.js';
+import * as config from './config.js';
+import * as gitCommit from './git/commit.js';
 import { determineMode, runOrchestrator } from './orchestrator.js';
 import type { CliArgs } from './types.js';
-import * as config from './config.js';
 import * as files from './utils/files.js';
 import * as logger from './utils/logger.js';
-import * as claudeCli from './claude/cli.js';
-import * as gitCommit from './git/commit.js';
 import * as timer from './utils/timer.js';
 
 describe('orchestrator.ts - Workflow Routing', () => {
@@ -17,7 +17,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         verbose: false,
         yolo: false,
         batch: true,
-        devOnly: false
+        devOnly: false,
       };
       expect(determineMode(args)).toBe('batch');
     });
@@ -29,7 +29,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         verbose: false,
         yolo: false,
         batch: false,
-        devOnly: true
+        devOnly: true,
       };
       expect(determineMode(args)).toBe('dev-only');
     });
@@ -41,7 +41,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         verbose: false,
         yolo: false,
         batch: false,
-        devOnly: false
+        devOnly: false,
       };
       expect(determineMode(args)).toBe('sequential');
     });
@@ -54,7 +54,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         yolo: false,
         batch: false,
         devOnly: false,
-        maxIterations: 5
+        maxIterations: 5,
       };
       expect(determineMode(args)).toBe('sequential');
     });
@@ -66,7 +66,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         verbose: true,
         yolo: true,
         batch: true,
-        devOnly: false
+        devOnly: false,
       };
       expect(determineMode(args)).toBe('batch');
     });
@@ -78,7 +78,7 @@ describe('orchestrator.ts - Workflow Routing', () => {
         verbose: true,
         yolo: true,
         batch: false,
-        devOnly: true
+        devOnly: true,
       };
       expect(determineMode(args)).toBe('dev-only');
     });
@@ -123,7 +123,9 @@ describe('runOrchestrator() - Mode Routing', () => {
   describe('batch mode routing', () => {
     test('should warn and return when state.workflow.mode is batch', async () => {
       // Mock pre-flight dependencies
-      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(Promise.resolve(true));
+      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(
+        Promise.resolve(true)
+      );
       const isBmadSpy = spyOn(files, 'isBmadProject').mockReturnValue(Promise.resolve(true));
       const ensureOutputSpy = spyOn(files, 'ensureOutputDir').mockResolvedValue(undefined);
       const isGitRepoSpy = spyOn(gitCommit, 'isGitRepo').mockReturnValue(Promise.resolve(true));
@@ -142,29 +144,33 @@ describe('runOrchestrator() - Mode Routing', () => {
       // Mock saveState
       const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
 
-      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(Promise.resolve({
-        currentEpic: 'epic-1',
-        lastUpdated: '2026-02-06T00:00:00.000Z',
-        workflow: {
-          mode: 'batch',
-          phase: 'implementation',
-          currentStoryIndex: 0,
-          devReviewIteration: 0
-        },
-        stories: {
-          completed: [],
-          approvals: {}
-        }
-      }));
+      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(
+        Promise.resolve({
+          currentEpic: 'epic-1',
+          lastUpdated: '2026-02-06T00:00:00.000Z',
+          workflow: {
+            mode: 'batch',
+            phase: 'implementation',
+            currentStoryIndex: 0,
+            devReviewIteration: 0,
+          },
+          stories: {
+            completed: [],
+            approvals: {},
+          },
+        })
+      );
       const loadEpicsSpy = spyOn(files, 'loadEpics').mockReturnValue(Promise.resolve([]));
-      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(Promise.resolve({
-        development_status: {
-          'epic-1': 'in-progress',
-          '1-1-test': 'ready-for-dev'
-        }
-      }));
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(
+        Promise.resolve({
+          development_status: {
+            'epic-1': 'in-progress',
+            '1-1-test': 'ready-for-dev',
+          },
+        })
+      );
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
-        { id: '1-1-test', status: 'ready-for-dev' }
+        { id: '1-1-test', status: 'ready-for-dev' },
       ]);
 
       const args: CliArgs = {
@@ -173,7 +179,7 @@ describe('runOrchestrator() - Mode Routing', () => {
         verbose: false,
         yolo: false,
         batch: false,
-        devOnly: false
+        devOnly: false,
       };
 
       try {
@@ -181,7 +187,9 @@ describe('runOrchestrator() - Mode Routing', () => {
 
         // Verify warn() was called with placeholder message
         expect(warnSpy).toHaveBeenCalledWith('Batch workflow not yet implemented');
-        expect(warnSpy).toHaveBeenCalledWith('        Try: Run without --batch flag for default sequential mode');
+        expect(warnSpy).toHaveBeenCalledWith(
+          '        Try: Run without --batch flag for default sequential mode'
+        );
       } finally {
         // Restore all mocks
         checkClaudeSpy.mockRestore();
@@ -207,7 +215,9 @@ describe('runOrchestrator() - Mode Routing', () => {
   describe('dev-only mode routing', () => {
     test('should warn and return when state.workflow.mode is dev-only', async () => {
       // Mock pre-flight dependencies
-      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(Promise.resolve(true));
+      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(
+        Promise.resolve(true)
+      );
       const isBmadSpy = spyOn(files, 'isBmadProject').mockReturnValue(Promise.resolve(true));
       const ensureOutputSpy = spyOn(files, 'ensureOutputDir').mockResolvedValue(undefined);
       const isGitRepoSpy = spyOn(gitCommit, 'isGitRepo').mockReturnValue(Promise.resolve(true));
@@ -226,29 +236,33 @@ describe('runOrchestrator() - Mode Routing', () => {
       // Mock saveState
       const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
 
-      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(Promise.resolve({
-        currentEpic: 'epic-2',
-        lastUpdated: '2026-02-06T00:00:00.000Z',
-        workflow: {
-          mode: 'dev-only',
-          phase: 'implementation',
-          currentStoryIndex: 0,
-          devReviewIteration: 0
-        },
-        stories: {
-          completed: [],
-          approvals: {}
-        }
-      }));
+      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(
+        Promise.resolve({
+          currentEpic: 'epic-2',
+          lastUpdated: '2026-02-06T00:00:00.000Z',
+          workflow: {
+            mode: 'dev-only',
+            phase: 'implementation',
+            currentStoryIndex: 0,
+            devReviewIteration: 0,
+          },
+          stories: {
+            completed: [],
+            approvals: {},
+          },
+        })
+      );
       const loadEpicsSpy = spyOn(files, 'loadEpics').mockReturnValue(Promise.resolve([]));
-      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(Promise.resolve({
-        development_status: {
-          'epic-2': 'in-progress',
-          '2-1-test': 'ready-for-dev'
-        }
-      }));
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(
+        Promise.resolve({
+          development_status: {
+            'epic-2': 'in-progress',
+            '2-1-test': 'ready-for-dev',
+          },
+        })
+      );
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
-        { id: '2-1-test', status: 'ready-for-dev' }
+        { id: '2-1-test', status: 'ready-for-dev' },
       ]);
 
       const args: CliArgs = {
@@ -257,7 +271,7 @@ describe('runOrchestrator() - Mode Routing', () => {
         verbose: false,
         yolo: false,
         batch: false,
-        devOnly: false
+        devOnly: false,
       };
 
       try {
@@ -265,7 +279,9 @@ describe('runOrchestrator() - Mode Routing', () => {
 
         // Verify warn() was called with placeholder message
         expect(warnSpy).toHaveBeenCalledWith('Dev-only workflow not yet implemented');
-        expect(warnSpy).toHaveBeenCalledWith('        Try: Run without --dev-only flag for default sequential mode');
+        expect(warnSpy).toHaveBeenCalledWith(
+          '        Try: Run without --dev-only flag for default sequential mode'
+        );
       } finally {
         // Restore all mocks
         checkClaudeSpy.mockRestore();
@@ -291,7 +307,9 @@ describe('runOrchestrator() - Mode Routing', () => {
   describe('state.workflow.mode drives routing (not CLI args)', () => {
     test('should use state.workflow.mode for routing even when CLI flags differ', async () => {
       // Mock pre-flight dependencies
-      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(Promise.resolve(true));
+      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(
+        Promise.resolve(true)
+      );
       const isBmadSpy = spyOn(files, 'isBmadProject').mockReturnValue(Promise.resolve(true));
       const ensureOutputSpy = spyOn(files, 'ensureOutputDir').mockResolvedValue(undefined);
       const isGitRepoSpy = spyOn(gitCommit, 'isGitRepo').mockReturnValue(Promise.resolve(true));
@@ -311,29 +329,33 @@ describe('runOrchestrator() - Mode Routing', () => {
       const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
 
       // State says batch, but CLI args say dev-only - state should win
-      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(Promise.resolve({
-        currentEpic: 'epic-3',
-        lastUpdated: '2026-02-06T00:00:00.000Z',
-        workflow: {
-          mode: 'batch', // State mode is batch
-          phase: 'implementation',
-          currentStoryIndex: 0,
-          devReviewIteration: 0
-        },
-        stories: {
-          completed: [],
-          approvals: {}
-        }
-      }));
+      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(
+        Promise.resolve({
+          currentEpic: 'epic-3',
+          lastUpdated: '2026-02-06T00:00:00.000Z',
+          workflow: {
+            mode: 'batch', // State mode is batch
+            phase: 'implementation',
+            currentStoryIndex: 0,
+            devReviewIteration: 0,
+          },
+          stories: {
+            completed: [],
+            approvals: {},
+          },
+        })
+      );
       const loadEpicsSpy = spyOn(files, 'loadEpics').mockReturnValue(Promise.resolve([]));
-      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(Promise.resolve({
-        development_status: {
-          'epic-3': 'in-progress',
-          '3-1-test': 'ready-for-dev'
-        }
-      }));
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(
+        Promise.resolve({
+          development_status: {
+            'epic-3': 'in-progress',
+            '3-1-test': 'ready-for-dev',
+          },
+        })
+      );
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
-        { id: '3-1-test', status: 'ready-for-dev' }
+        { id: '3-1-test', status: 'ready-for-dev' },
       ]);
 
       const args: CliArgs = {
@@ -342,7 +364,7 @@ describe('runOrchestrator() - Mode Routing', () => {
         verbose: false,
         yolo: false,
         batch: false, // CLI says NOT batch
-        devOnly: true // CLI says dev-only
+        devOnly: true, // CLI says dev-only
       };
 
       try {
