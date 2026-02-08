@@ -20,6 +20,12 @@ export function displayError(
   context: string,
   recoveryCmd: string
 ): void {
+  if (!recoveryCmd || recoveryCmd.trim() === '') {
+    throw new Error(
+      'recoveryCmd must be a non-empty string (AC#2: actionable recovery guidance required)'
+    );
+  }
+
   const errorLabel = chalk.red.bold('[ERROR]');
   const firstLine = `${errorLabel} ${errorType}: ${description}`;
   const contextLine = `        State saved at ${context}`;

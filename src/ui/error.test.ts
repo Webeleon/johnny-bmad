@@ -52,15 +52,10 @@ describe('error.ts - Error Block Component', () => {
       expect(logs[2]).toMatch(/^\s{8}Try:/);
     });
 
-    test('should handle empty strings', () => {
-      const logs = captureLogs(() => {
+    test('should throw error when all parameters are empty strings', () => {
+      expect(() => {
         displayError('', '', '', '');
-      });
-
-      expect(logs).toHaveLength(3);
-      expect(logs[0]).toContain('[ERROR]');
-      expect(logs[1]).toContain('State saved at');
-      expect(logs[2]).toContain('Try:');
+      }).toThrow('recoveryCmd must be a non-empty string');
     });
 
     test('should handle special characters in parameters', () => {
@@ -137,6 +132,18 @@ describe('error.ts - Error Block Component', () => {
       expect(logs[0]).toMatch(/^\[ERROR\] API Error: Rate limited$/);
       expect(logs[1]).toMatch(/^\s{8}State saved at Story 4\/8$/);
       expect(logs[2]).toMatch(/^\s{8}Try: wait 60s and restart$/);
+    });
+
+    test('should throw error when recoveryCmd is empty (AC#2 validation)', () => {
+      expect(() => {
+        displayError('API Error', 'Rate limited', 'Story 4/8', '');
+      }).toThrow('recoveryCmd must be a non-empty string');
+    });
+
+    test('should throw error when recoveryCmd is only whitespace', () => {
+      expect(() => {
+        displayError('API Error', 'Rate limited', 'Story 4/8', '   ');
+      }).toThrow('recoveryCmd must be a non-empty string');
     });
   });
 });
