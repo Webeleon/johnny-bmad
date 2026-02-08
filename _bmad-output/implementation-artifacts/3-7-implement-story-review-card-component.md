@@ -1,6 +1,6 @@
 # Story 3.7: Implement Story Review Card Component
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -68,6 +68,10 @@ so that I can quickly review and approve each story.
 - [ ] [AI-Review][MEDIUM] Add test for both empty tasks and empty AC simultaneously - Current tests handle empty tasks or empty AC separately, but not both empty at the same time (edge case for empty stories). [src/ui/story-card.test.ts:158-184]
 - [ ] [AI-Review][MEDIUM] Add test for very long story titles - No test for title truncation or wrapping behavior with extremely long titles (could cause display issues). [src/ui/story-card.ts:62]
 - [ ] [AI-Review][LOW] Re-evaluate AC #4 prompt format implementation - inquirer's `expand` type displays `? Your choice (ynvH)` with hints, not the exact inline `[Y] Approve  [N] Request changes  [V] View full story` format specified. Consider if this meets the AC or needs clarification. [src/ui/story-card.ts:84-95]
+
+- [ ] [AI-Review][MEDIUM] AC #4 prompt format clarification needed - inquirer's `expand` type displays `? Your choice (ynvH)` with hints below, not the exact inline `[Y] Approve  [N] Request changes  [V] View full story` format specified in AC. Consider whether current implementation meets AC or if AC needs clarification. [src/ui/story-card.ts:90-101]
+- [ ] [AI-Review][MEDIUM] Add test for very long story title terminal behavior - Current test at line 131-147 verifies title display but doesn't test behavior with terminal width constraints (truncation/wrapping). [src/ui/story-card.test.ts:131-147]
+- [ ] [AI-Review][LOW] Export UNICODE_SEPARATOR and ASCII_SEPARATOR constants - Could improve consistency across UI components similar to how isUnicodeSupported is shared. [src/ui/story-card.ts:35-36]
 
 ## Dev Notes
 
