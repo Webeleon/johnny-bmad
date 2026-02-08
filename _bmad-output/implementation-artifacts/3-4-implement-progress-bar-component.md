@@ -1,6 +1,6 @@
 # Story 3.4: Implement Progress Bar Component
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
