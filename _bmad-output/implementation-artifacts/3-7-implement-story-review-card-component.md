@@ -1,6 +1,6 @@
 # Story 3.7: Implement Story Review Card Component
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
