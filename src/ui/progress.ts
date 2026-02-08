@@ -7,6 +7,11 @@ const UNICODE_EMPTY = '░';
 const ASCII_FILLED = '#';
 const ASCII_EMPTY = '-';
 
+/**
+ * Displays a progress bar showing story completion status.
+ * Uses cyan color by default, respects NO_COLOR environment variable.
+ * Falls back to ASCII characters (#/-) if Unicode is not supported.
+ */
 export function displayProgress(current: number, total: number, status: string): void {
   const useUnicode = isUnicodeSupported();
   const filled = useUnicode ? UNICODE_FILLED : ASCII_FILLED;

@@ -149,6 +149,19 @@ so that I know how far along the epic is.
 - [x] [AI-Review][LOW] Completion Notes full suite test count is stale — RESOLVED: Updated to reflect current count of 320 tests (as of 2026-02-08) with disclaimer that count may increase [story file, Completion Notes line 392-393]
 - [x] [AI-Review][LOW] File List says "(modified)" but git shows files were first committed in story 3-4 — RESOLVED: File List already clarifies "implemented in Story 3-4, stub created in Story 3-1" which accurately reflects history [story file, File List section lines 421-422]
 
+### Review Follow-ups Round 7 (AI)
+
+- [x] [AI-Review][MEDIUM] Missing JSDoc on `displayProgress()` function — RESOLVED: Added 4-line JSDoc matching banner.ts and phase-header.ts pattern (purpose, color, NO_COLOR, fallback) [src/ui/progress.ts:10-14]
+- [x] [AI-Review][MEDIUM] Cyan color test uses a nested console.log mock pattern that bypasses the shared `beforeEach` mock — RESOLVED: Refactored to use shared `consoleOutput` capture with `chalk.level=3` and try/finally. Eliminated nested mock chain, `tempLog`, and single-arg capture. Test now uses same pattern as all others [src/ui/progress.test.ts:204-216]
+- [x] [AI-Review][MEDIUM] Completion Notes TS error claim doesn't enumerate affected files — RESOLVED: Updated Completion Notes to list specific files: `reviewer.ts:64`, `user-input.test.ts:12,22,32` [story file, Completion Notes]
+- [ ] [AI-Review][LOW] No test for Infinity input edge case — `displayProgress(Infinity, 8, 'test')` and `displayProgress(4, Infinity, 'test')` are untested. Clamp handles Infinity correctly but these are natural companions to the NaN tests added in R5 [src/ui/progress.test.ts]
+
+### Review Follow-ups Round 8 (AI)
+
+- [x] [AI-Review][MEDIUM] NaN current test doesn't verify suffix behavior — RESOLVED: Added `expect(output).toContain('test...')` assertion. NaN >= 8 is false so suffix is present. Now consistent with NaN total test which already verified suffix [src/ui/progress.test.ts:249]
+- [x] [AI-Review][MEDIUM] Cyan test captures only single arg — RESOLVED: Eliminated by refactoring cyan test to use shared `consoleOutput` mock (see R7 item 2 fix). No longer uses custom single-arg capture [src/ui/progress.test.ts:204-216]
+- [ ] [AI-Review][LOW] No test for Infinity input edge case — duplicate of R7 LOW item, consolidated there [src/ui/progress.test.ts]
+
 ## Dev Notes
 
 ### Architecture Compliance
@@ -392,7 +405,7 @@ None
 - ✅ All tests pass (23 tests in progress.test.ts; full suite: 320 tests as of 2026-02-08)
   - **Note:** Test count reflects state at Round 6 completion (2026-02-08). The 23 tests include: 13 original baseline tests + 3 edge case tests (R1-R2) + 1 cyan color test (R3) + 2 NaN tests (R5) + 4 ASCII bar-width tests that were present but not counted in earlier rounds. Full suite count may increase as subsequent stories add tests.
 - ✅ Achieved 100% code coverage for `src/ui/progress.ts` (exceeds 90% requirement)
-- ✅ TypeScript compilation has 4 pre-existing errors (not introduced by this story)
+- ✅ TypeScript compilation has 4 pre-existing errors (not introduced by this story): `reviewer.ts:64` (TS18047 null check), `user-input.test.ts:12,22,32` (TS2739 mock type mismatch)
 - ✅ All acceptance criteria validated and passing
 
 **Key Implementation Details:**
@@ -414,6 +427,7 @@ None
 - ✅ Round 4: Resolved 5 review findings - Fixed non-functional cyan test by forcing `chalk.level=3` and capturing raw ANSI output (H), removed dead `consoleRawArgs` infrastructure (M), chalk import now used properly for test setup (L), R3 cyan item remains correctly marked [x] (M), all changes will be committed in this session (M)
 - ✅ Round 5: Resolved 4 review findings - Added NaN guard `|| 0` to prevent 0-width bar crash (M), updated File List to include story file (M), added subtasks 3.15-3.18 documenting review-added tests (M), kept verbose review history for learning value (L)
 - ✅ Round 6 (Revision 2): Resolved 5 review findings - Added ASCII bar-width validation test (auto-expanded by linter to 4 comprehensive tests covering 50%, 3/7, 0%, 100%), added NaN total parameter test, fixed cyan test try/finally protection (M), updated test count to 320 full suite / 23 in progress.test.ts (L), File List already accurate (L)
+- ✅ Round 7+8: Resolved 5 review findings - Added JSDoc to displayProgress() (M), refactored cyan test to use shared mock pattern eliminating nested mock chain (M), enumerated TS error files in Completion Notes (M), added NaN suffix assertion (M), consolidated duplicate Infinity LOW item
 - All 23 tests passing with 100% coverage maintained, full suite: 320 tests (as of 2026-02-08)
 
 ### File List

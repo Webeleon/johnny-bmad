@@ -202,36 +202,17 @@ describe('progress.ts - Progress Bar', () => {
     });
 
     test('should apply cyan color styling via chalk.cyan()', () => {
-      // Force chalk to use color level 3 (truecolor) by setting chalk instance level
-      // This ensures ANSI codes are included in output even during testing
       const originalLevel = chalk.level;
-      const tempLog = console.log;
-      let rawArg: unknown;
-
       try {
         chalk.level = 3;
-
-        // Capture raw console.log args to preserve ANSI codes
-        console.log = (arg: unknown) => {
-          rawArg = arg;
-          tempLog(arg);
-        };
-
         displayProgress(4, 8, 'implementing');
-
-        // Convert to string (preserves ANSI codes when chalk.level=3)
-        const rawString = String(rawArg);
-
-        // Verify ANSI cyan escape code (\x1b[36m) is present in raw output
-        // This proves chalk.cyan() wrapper is actually applied at progress.ts:22
-        expect(rawString).toContain('\x1b[36m');
-
-        // Also verify expected content
-        expect(rawString).toContain('Story 4/8');
-        expect(rawString).toContain('implementing...');
+        const output = consoleOutput.join('\n');
+        // Verify ANSI cyan escape code (\x1b[36m) is present
+        // This proves chalk.cyan() wrapper is actually applied at progress.ts
+        expect(output).toContain('\x1b[36m');
+        expect(output).toContain('Story 4/8');
+        expect(output).toContain('implementing...');
       } finally {
-        // Always restore console.log and chalk.level even if test throws
-        console.log = tempLog;
         chalk.level = originalLevel;
       }
     });
@@ -246,6 +227,8 @@ describe('progress.ts - Progress Bar', () => {
       expect(barMatch?.[1].length).toBe(16);
       // With NaN input, should produce all empty bar
       expect(barMatch?.[1]).toBe('░░░░░░░░░░░░░░░░');
+      // NaN >= 8 is false, so suffix should be present
+      expect(output).toContain('test...');
     });
 
     test('should handle NaN total parameter without crashing', () => {
