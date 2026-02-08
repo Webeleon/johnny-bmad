@@ -1,15 +1,15 @@
-import { describe, it, expect } from 'bun:test';
-import { Writable } from 'stream';
+import { describe, expect, it } from 'bun:test';
+import { Writable } from 'node:stream';
 import { createLabeledStream } from './stream-wrapper.js';
 
 describe('createLabeledStream', () => {
   it('should prefix complete lines with agent role', async () => {
     const output: string[] = [];
     const mockStream = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk, _encoding, callback) {
         output.push(chunk.toString());
         callback();
-      }
+      },
     });
 
     const labeledStream = createLabeledStream('Dev', 'stdout', mockStream as any);
@@ -30,10 +30,10 @@ describe('createLabeledStream', () => {
   it('should handle partial lines by buffering', async () => {
     const output: string[] = [];
     const mockStream = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk, _encoding, callback) {
         output.push(chunk.toString());
         callback();
-      }
+      },
     });
 
     const labeledStream = createLabeledStream('SM', 'stdout', mockStream as any);
@@ -54,10 +54,10 @@ describe('createLabeledStream', () => {
   it('should handle multiple lines in single write', async () => {
     const output: string[] = [];
     const mockStream = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk, _encoding, callback) {
         output.push(chunk.toString());
         callback();
-      }
+      },
     });
 
     const labeledStream = createLabeledStream('Review', 'stdout', mockStream as any);
@@ -79,10 +79,10 @@ describe('createLabeledStream', () => {
   it('should label stderr with :ERR suffix', async () => {
     const output: string[] = [];
     const mockStream = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk, _encoding, callback) {
         output.push(chunk.toString());
         callback();
-      }
+      },
     });
 
     const labeledStream = createLabeledStream('Dev', 'stderr', mockStream as any);
@@ -100,10 +100,10 @@ describe('createLabeledStream', () => {
   it('should flush remaining buffer on stream end', async () => {
     const output: string[] = [];
     const mockStream = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk, _encoding, callback) {
         output.push(chunk.toString());
         callback();
-      }
+      },
     });
 
     const labeledStream = createLabeledStream('Story Creator', 'stdout', mockStream as any);

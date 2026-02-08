@@ -1,1 +1,4 @@
-export function displayStatus(level: 'ok' | 'fail' | 'warn' | 'info' | 'error', message: string): void {}
+export function displayStatus(
+  _level: 'ok' | 'fail' | 'warn' | 'info' | 'error',
+  _message: string
+): void {}

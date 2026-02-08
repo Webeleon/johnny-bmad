@@ -37,7 +37,7 @@ export function createTimer(): Timer {
 
   return {
     elapsed: () => Date.now() - startTime,
-    format: () => formatDuration(Date.now() - startTime)
+    format: () => formatDuration(Date.now() - startTime),
   };
 }
 

@@ -1,11 +1,11 @@
-import { spawn, execSync } from 'child_process';
-import { info, warn, debug } from '../utils/logger.js';
+import { execSync, spawn } from 'node:child_process';
+import { debug, info, warn } from '../utils/logger.js';
 
 function runGitCommand(args: string[], cwd: string): Promise<{ code: number; output: string }> {
   return new Promise((resolve) => {
     const proc = spawn('git', args, {
       cwd,
-      stdio: ['inherit', 'pipe', 'pipe']
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
     const chunks: Buffer[] = [];
@@ -29,12 +29,12 @@ function runGitCommand(args: string[], cwd: string): Promise<{ code: number; out
   });
 }
 
-function runGitCommandSync(args: string[], cwd: string): { code: number; output: string } {
+function _runGitCommandSync(args: string[], cwd: string): { code: number; output: string } {
   try {
     const output = execSync(['git', ...args].join(' '), {
       cwd,
       encoding: 'utf-8',
-      stdio: ['inherit', 'pipe', 'pipe']
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
     return { code: 0, output: output || '' };
   } catch (err: unknown) {
@@ -85,7 +85,7 @@ export function isGitRepo(cwd: string): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = spawn('git', ['rev-parse', '--is-inside-work-tree'], {
       cwd,
-      stdio: ['inherit', 'pipe', 'pipe']
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
     proc.on('close', (code) => {

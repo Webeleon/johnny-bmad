@@ -11,14 +11,14 @@ export async function selectEpic(epics: Epic[]): Promise<Epic | null> {
       type: 'list',
       name: 'selectedEpic',
       message: 'Select an epic to implement:',
-      choices: epics.map(epic => ({
+      choices: epics.map((epic) => ({
         name: `${epic.id}: ${epic.title} (${epic.stories.length} stories)`,
-        value: epic.id
-      }))
-    }
+        value: epic.id,
+      })),
+    },
   ]);
 
-  return epics.find(e => e.id === selectedEpic) || null;
+  return epics.find((e) => e.id === selectedEpic) || null;
 }
 
 export async function confirmResume(storyId: string, storyIndex: number): Promise<boolean> {
@@ -27,8 +27,8 @@ export async function confirmResume(storyId: string, storyIndex: number): Promis
       type: 'confirm',
       name: 'resume',
       message: `Resume from story ${storyId} (story #${storyIndex + 1})?`,
-      default: true
-    }
+      default: true,
+    },
   ]);
 
   return resume;
@@ -49,9 +49,9 @@ export async function handleMaxIterations(
         { name: 'Continue (reset iteration counter)', value: 'continue' },
         { name: 'Mark as complete (run final dev pass, then commit)', value: 'complete' },
         { name: 'Skip story (mark as blocked)', value: 'skip' },
-        { name: 'Abort (exit script)', value: 'abort' }
-      ]
-    }
+        { name: 'Abort (exit script)', value: 'abort' },
+      ],
+    },
   ]);
 
   return action;
@@ -63,8 +63,8 @@ export async function confirmAction(message: string, defaultValue = true): Promi
       type: 'confirm',
       name: 'confirmed',
       message,
-      default: defaultValue
-    }
+      default: defaultValue,
+    },
   ]);
 
   return confirmed;
@@ -75,8 +75,8 @@ export async function promptForInput(message: string): Promise<string> {
     {
       type: 'input',
       name: 'input',
-      message
-    }
+      message,
+    },
   ]);
 
   return input;
@@ -88,8 +88,8 @@ export async function confirmContinueNextEpic(nextEpicId: string): Promise<boole
       type: 'confirm',
       name: 'continueNext',
       message: `Epic complete! Continue with next epic (${nextEpicId})?`,
-      default: true
-    }
+      default: true,
+    },
   ]);
   return continueNext;
 }

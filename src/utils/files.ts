@@ -1,7 +1,15 @@
-import { readdir, readFile, writeFile, stat } from 'fs/promises';
-import { join } from 'path';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import YAML from 'yaml';
-import type { BmadConfig, SprintStatus, Epic, EpicStory, Story, AcceptanceCriterion, OngoingWork } from '../types.js';
+import type {
+  AcceptanceCriterion,
+  BmadConfig,
+  Epic,
+  EpicStory,
+  OngoingWork,
+  SprintStatus,
+  Story,
+} from '../types.js';
 import { debug } from './logger.js';
 
 const BMAD_DIR = '_bmad';
@@ -30,7 +38,7 @@ export async function ensureOutputDir(cwd: string): Promise<void> {
   try {
     await stat(outputPath);
   } catch {
-    const { mkdir } = await import('fs/promises');
+    const { mkdir } = await import('node:fs/promises');
     await mkdir(outputPath, { recursive: true });
   }
 }
@@ -57,7 +65,7 @@ export async function loadEpics(cwd: string): Promise<Epic[]> {
 
   try {
     const files = await readdir(epicsPath);
-    const epicFiles = files.filter(f => f.startsWith('epic-') && f.endsWith('.md'));
+    const epicFiles = files.filter((f) => f.startsWith('epic-') && f.endsWith('.md'));
 
     for (const file of epicFiles) {
       const filePath = join(epicsPath, file);
@@ -82,7 +90,7 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
   const id = fileMatch ? fileMatch[1] : 'unknown';
 
   // Extract title from first H1
-  const titleLine = lines.find(l => l.startsWith('# '));
+  const titleLine = lines.find((l) => l.startsWith('# '));
   const title = titleLine ? titleLine.replace(/^#\s+/, '') : `Epic ${id}`;
 
   // Extract stories from the file
@@ -111,7 +119,7 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
         stories.push({
           id: checkboxMatch[2],
           title: checkboxMatch[3].trim(),
-          status: checkboxMatch[1] === 'x' ? 'done' : 'pending'
+          status: checkboxMatch[1] === 'x' ? 'done' : 'pending',
         });
         continue;
       }
@@ -121,7 +129,7 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
       if (simpleMatch) {
         stories.push({
           id: simpleMatch[1],
-          title: simpleMatch[2].trim()
+          title: simpleMatch[2].trim(),
         });
         continue;
       }
@@ -131,7 +139,7 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
       if (numberedMatch) {
         stories.push({
           id: numberedMatch[1],
-          title: numberedMatch[2].trim()
+          title: numberedMatch[2].trim(),
         });
       }
     }
@@ -141,7 +149,7 @@ function parseEpicFile(content: string, filePath: string): Epic | null {
     id,
     title,
     stories,
-    filePath
+    filePath,
   };
 }
 
@@ -150,8 +158,8 @@ export async function loadStory(cwd: string, storyId: string): Promise<Story | n
 
   try {
     const files = await readdir(storiesPath);
-    const storyFile = files.find(f =>
-      f.toLowerCase().includes(storyId.toLowerCase()) && f.endsWith('.md')
+    const storyFile = files.find(
+      (f) => f.toLowerCase().includes(storyId.toLowerCase()) && f.endsWith('.md')
     );
 
     if (!storyFile) {
@@ -170,7 +178,7 @@ function parseStoryFile(content: string, storyId: string, filePath: string): Sto
   const lines = content.split('\n');
 
   // Extract title from first H1
-  const titleLine = lines.find(l => l.startsWith('# '));
+  const titleLine = lines.find((l) => l.startsWith('# '));
   const title = titleLine ? titleLine.replace(/^#\s+/, '') : `Story ${storyId}`;
 
   // Extract acceptance criteria
@@ -196,7 +204,7 @@ function parseStoryFile(content: string, storyId: string, filePath: string): Sto
       if (checkboxMatch) {
         acceptanceCriteria.push({
           text: checkboxMatch[2].trim(),
-          done: checkboxMatch[1] === 'x'
+          done: checkboxMatch[1] === 'x',
         });
       }
     }
@@ -206,7 +214,7 @@ function parseStoryFile(content: string, storyId: string, filePath: string): Sto
     id: storyId,
     title,
     acceptanceCriteria,
-    filePath
+    filePath,
   };
 }
 
@@ -215,9 +223,7 @@ export async function storyFileExists(cwd: string, storyId: string): Promise<boo
 
   try {
     const files = await readdir(storiesPath);
-    return files.some(f =>
-      f.toLowerCase().includes(storyId.toLowerCase()) && f.endsWith('.md')
-    );
+    return files.some((f) => f.toLowerCase().includes(storyId.toLowerCase()) && f.endsWith('.md'));
   } catch {
     return false;
   }
@@ -227,15 +233,29 @@ export function areAllAcceptanceCriteriaDone(story: Story): boolean {
   if (story.acceptanceCriteria.length === 0) {
     return false;
   }
-  return story.acceptanceCriteria.every(ac => ac.done);
+  return story.acceptanceCriteria.every((ac) => ac.done);
 }
 
 export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork | null {
   if (!sprintStatus?.development_status) return null;
 
   const entries = Object.entries(sprintStatus.development_status);
-  const actionableStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
-  const incompleteStatuses = ['review', 'in-progress', 'ready-for-dev', 'backlog', 'pending', 'ready'];
+  const actionableStatuses = [
+    'review',
+    'in-progress',
+    'ready-for-dev',
+    'backlog',
+    'pending',
+    'ready',
+  ];
+  const incompleteStatuses = [
+    'review',
+    'in-progress',
+    'ready-for-dev',
+    'backlog',
+    'pending',
+    'ready',
+  ];
 
   // Separate epics and stories (epics start with "epic-")
   const inProgressEpics: string[] = [];
@@ -258,21 +278,19 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
     return {
       epicId: `epic-${epicNum}`,
       stories: actionableStories,
-      source: 'sprint-status'
+      source: 'sprint-status',
     };
   }
 
   // If we have in-progress epics, check if they actually have remaining work
   for (const epicId of inProgressEpics) {
     const epicNum = epicId.replace('epic-', '');
-    const epicStories = entries.filter(([id]) =>
-      !id.startsWith('epic-') && id.startsWith(`${epicNum}-`)
+    const epicStories = entries.filter(
+      ([id]) => !id.startsWith('epic-') && id.startsWith(`${epicNum}-`)
     );
 
     // Check if any story is NOT done
-    const hasIncompleteWork = epicStories.some(([, status]) =>
-      incompleteStatuses.includes(status)
-    );
+    const hasIncompleteWork = epicStories.some(([, status]) => incompleteStatuses.includes(status));
 
     if (hasIncompleteWork) {
       const stories = epicStories
@@ -281,7 +299,7 @@ export function findOngoingWork(sprintStatus: SprintStatus | null): OngoingWork 
       return {
         epicId,
         stories,
-        source: 'sprint-status'
+        source: 'sprint-status',
       };
     }
     // If all stories are done but epic still marked in-progress, skip it
@@ -327,16 +345,16 @@ export function getEpicsFromSprintStatus(sprintStatus: SprintStatus | null): Epi
 
   const devStatus = sprintStatus.development_status;
   const epicIds = Object.keys(devStatus)
-    .filter(id => id.startsWith('epic-'))
-    .filter(id => devStatus[id] !== 'done');
+    .filter((id) => id.startsWith('epic-'))
+    .filter((id) => devStatus[id] !== 'done');
 
-  return epicIds.map(epicId => {
+  return epicIds.map((epicId) => {
     const stories = getAllStoriesForEpic(sprintStatus, epicId);
     return {
       id: epicId.replace('epic-', ''),
       title: `Epic ${epicId.replace('epic-', '')}`,
-      stories: stories.map(s => ({ id: s.id, title: s.id, status: s.status })),
-      filePath: ''
+      stories: stories.map((s) => ({ id: s.id, title: s.id, status: s.status })),
+      filePath: '',
     };
   });
 }
@@ -344,11 +362,7 @@ export function getEpicsFromSprintStatus(sprintStatus: SprintStatus | null): Epi
 /**
  * Update the status of a story or epic in sprint-status.yaml
  */
-export async function updateSprintStatus(
-  cwd: string,
-  id: string,
-  status: string
-): Promise<void> {
+export async function updateSprintStatus(cwd: string, id: string, status: string): Promise<void> {
   const statusPath = join(cwd, SPRINT_STATUS_PATH);
 
   try {

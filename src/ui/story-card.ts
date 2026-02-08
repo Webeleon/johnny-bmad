@@ -6,14 +6,14 @@ export interface StoryCardData {
   tasks: string[];
 }
 
-export function displayStoryCard(story: StoryCardData, index: number, total: number): void {}
+export function displayStoryCard(_story: StoryCardData, _index: number, _total: number): void {}
 
 // NOTE: Signature matches architecture example (project-structure-boundaries.md:558)
 // Implementation will be completed in Story 3.7
 export async function promptStoryApproval(
-  story: StoryCardData,
-  index: number,
-  total: number
+  _story: StoryCardData,
+  _index: number,
+  _total: number
 ): Promise<'approved' | 'needs-changes' | 'view'> {
   return 'approved';
 }

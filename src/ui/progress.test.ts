@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import chalk from 'chalk';
 import { displayProgress } from './progress.js';
 
@@ -99,9 +99,9 @@ describe('progress.ts - Progress Bar', () => {
       // Extract the ASCII bar content between [ and ]
       const barMatch = output.match(/\[([#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
+      expect(barMatch?.[1].length).toBe(16);
       // Verify it's ASCII chars (8 filled # + 8 empty -)
-      expect(barMatch![1]).toBe('########--------');
+      expect(barMatch?.[1]).toBe('########--------');
     });
 
     test('should have exactly 16 characters in ASCII bar for non-even division (3/7)', () => {
@@ -111,9 +111,9 @@ describe('progress.ts - Progress Bar', () => {
       // Extract ASCII bar with regex matching # and -
       const barMatch = output.match(/\[([#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
+      expect(barMatch?.[1].length).toBe(16);
       // 3/7 = ~43% → Math.round(0.43 * 16) = 7 filled
-      expect(barMatch![1]).toBe('#######---------');
+      expect(barMatch?.[1]).toBe('#######---------');
     });
 
     test('should have exactly 16 characters in ASCII bar at 0%', () => {
@@ -122,8 +122,8 @@ describe('progress.ts - Progress Bar', () => {
       const output = consoleOutput.join('\n');
       const barMatch = output.match(/\[([#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('----------------');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('----------------');
     });
 
     test('should have exactly 16 characters in ASCII bar at 100%', () => {
@@ -132,8 +132,8 @@ describe('progress.ts - Progress Bar', () => {
       const output = consoleOutput.join('\n');
       const barMatch = output.match(/\[([#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('################');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('################');
     });
 
     test('should have bar width of exactly 16 characters', () => {
@@ -142,7 +142,7 @@ describe('progress.ts - Progress Bar', () => {
       // Extract the bar content between [ and ]
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
+      expect(barMatch?.[1].length).toBe(16);
     });
 
     test('should produce bar with exactly 16 characters for non-even division (3/7)', () => {
@@ -150,7 +150,7 @@ describe('progress.ts - Progress Bar', () => {
       const output = consoleOutput.join('\n');
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
+      expect(barMatch?.[1].length).toBe(16);
     });
 
     test('should not crash with total=0 edge case', () => {
@@ -173,8 +173,8 @@ describe('progress.ts - Progress Bar', () => {
       // Bar should be clamped to max width (all filled)
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('████████████████');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('████████████████');
     });
 
     test('should not crash with negative current value (clamped to 0)', () => {
@@ -184,8 +184,8 @@ describe('progress.ts - Progress Bar', () => {
       // Bar should be clamped to 0 filled (all empty)
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('░░░░░░░░░░░░░░░░');
     });
 
     test('should handle negative total parameter gracefully', () => {
@@ -195,8 +195,8 @@ describe('progress.ts - Progress Bar', () => {
       // With negative total, produces empty bar (division guard: total > 0 check)
       const barMatch = output.match(/\[([█░]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('░░░░░░░░░░░░░░░░');
       // Status with no dots since 2 >= -5 is true
       expect(output).not.toContain('broken...');
     });
@@ -224,9 +224,9 @@ describe('progress.ts - Progress Bar', () => {
       // Bar should fall back to all empty (16 chars) instead of broken 0-width bar
       const barMatch = output.match(/\[([█░#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
+      expect(barMatch?.[1].length).toBe(16);
       // With NaN input, should produce all empty bar
-      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      expect(barMatch?.[1]).toBe('░░░░░░░░░░░░░░░░');
       // NaN >= 8 is false, so suffix should be present
       expect(output).toContain('test...');
     });
@@ -238,8 +238,8 @@ describe('progress.ts - Progress Bar', () => {
       // With NaN total: NaN > 0 is false, so bar renders empty
       const barMatch = output.match(/\[([█░#-]+)\]/);
       expect(barMatch).toBeTruthy();
-      expect(barMatch![1].length).toBe(16);
-      expect(barMatch![1]).toBe('░░░░░░░░░░░░░░░░');
+      expect(barMatch?.[1].length).toBe(16);
+      expect(barMatch?.[1]).toBe('░░░░░░░░░░░░░░░░');
       // 4 >= NaN is false, so ... suffix should be present
       expect(output).toContain('test...');
     });

@@ -1,16 +1,42 @@
 import chalk from 'chalk';
-import type { CliArgs, Epic, State, WorkflowMode } from './types.js';
-import { loadState, saveState, createInitialState, clearState } from './config.js';
-import { isBmadProject, ensureOutputDir, loadEpics, loadStory, storyFileExists, loadSprintStatus, findOngoingWork, getAllStoriesForEpic, getEpicsFromSprintStatus, updateSprintStatus, markEpicComplete } from './utils/files.js';
-import { selectEpic, confirmResume, handleMaxIterations, confirmAction, confirmContinueNextEpic } from './utils/user-input.js';
-import { checkClaudeInstalled } from './claude/cli.js';
-import { runSmAgent } from './agents/sm.js';
-import { runStoryCreator } from './agents/story-creator.js';
 import { runDevAgent } from './agents/dev.js';
 import { runReviewAgent } from './agents/reviewer.js';
+import { runSmAgent } from './agents/sm.js';
+import { runStoryCreator } from './agents/story-creator.js';
+import { checkClaudeInstalled } from './claude/cli.js';
+import { clearState, createInitialState, loadState, saveState } from './config.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
-import { info, error, success, warn, header, step, setVerbose, successWithTiming } from './utils/logger.js';
-import { startSessionTimer, getSessionElapsed } from './utils/timer.js';
+import type { CliArgs, Epic, WorkflowMode } from './types.js';
+import {
+  ensureOutputDir,
+  findOngoingWork,
+  getAllStoriesForEpic,
+  getEpicsFromSprintStatus,
+  isBmadProject,
+  loadEpics,
+  loadSprintStatus,
+  loadStory,
+  markEpicComplete,
+  storyFileExists,
+  updateSprintStatus,
+} from './utils/files.js';
+import {
+  error,
+  header,
+  info,
+  setVerbose,
+  step,
+  success,
+  successWithTiming,
+  warn,
+} from './utils/logger.js';
+import { getSessionElapsed, startSessionTimer } from './utils/timer.js';
+import {
+  confirmAction,
+  confirmContinueNextEpic,
+  handleMaxIterations,
+  selectEpic,
+} from './utils/user-input.js';
 
 /**
  * Determine workflow mode based on CLI arguments
@@ -86,7 +112,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     let state = await loadState(cwd);
     let selectedEpicId: string | null = null;
-    let autoStarted = false;
+    let _autoStarted = false;
     let ongoingStories: Array<{ id: string; status: string }> = [];
 
     // Priority 1: Resume from johnny-bmad state (in-progress session)
@@ -94,8 +120,10 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       selectedEpicId = state.currentEpic;
       info(`Resuming in ${state.workflow.mode} mode...`);
       success(`Resuming ongoing session: ${state.currentEpic}`);
-      info(`Story index: ${state.workflow.currentStoryIndex}, Completed: ${state.stories.completed.length}`);
-      autoStarted = true;
+      info(
+        `Story index: ${state.workflow.currentStoryIndex}, Completed: ${state.stories.completed.length}`
+      );
+      _autoStarted = true;
     }
 
     // Priority 2: Check sprint-status.yaml for ongoing work
@@ -113,9 +141,11 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
         success(`Found ongoing work in epic: ${selectedEpicId}`);
         if (ongoingStories.length > 0) {
-          info(`Actionable stories: ${ongoingStories.map(s => `${s.id} (${s.status})`).join(', ')}`);
+          info(
+            `Actionable stories: ${ongoingStories.map((s) => `${s.id} (${s.status})`).join(', ')}`
+          );
         }
-        autoStarted = true;
+        _autoStarted = true;
       }
     }
 
@@ -163,7 +193,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
 
     // Now load epic details (needed for story processing)
     const epics = await loadEpics(cwd);
-    let selectedEpic: Epic | null = epics.find(e => e.id === selectedEpicId) || null;
+    let selectedEpic: Epic | null = epics.find((e) => e.id === selectedEpicId) || null;
 
     if (!selectedEpic) {
       // Epic not found in files, but we have sprint-status info
@@ -179,8 +209,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         selectedEpic = {
           id: selectedEpicId!,
           title: `Epic ${selectedEpicId}`,
-          stories: storiesToUse.map(s => ({ id: s.id, title: s.id, status: s.status })),
-          filePath: ''
+          stories: storiesToUse.map((s) => ({ id: s.id, title: s.id, status: s.status })),
+          filePath: '',
         };
       } else {
         error(`Epic ${selectedEpicId} not found and no story data available`);
@@ -194,10 +224,10 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       const allStories = getAllStoriesForEpic(sprintStatus, selectedEpicId!);
       if (allStories.length > 0) {
         warn(`Epic file has no parseable stories, using sprint-status data`);
-        selectedEpic.stories = allStories.map(s => ({
+        selectedEpic.stories = allStories.map((s) => ({
           id: s.id,
           title: s.id,
-          status: s.status
+          status: s.status,
         }));
       }
     }
@@ -206,7 +236,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     info(`Stories to implement: ${selectedEpic.stories.length}`);
 
     // Route to appropriate workflow based on mode (use state mode for resume, CLI mode for fresh start)
-    const activeMode = state!.workflow.mode;
+    const activeMode = state?.workflow.mode;
 
     if (activeMode === 'batch') {
       warn('Batch workflow not yet implemented');
@@ -235,7 +265,7 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       info(`Title: ${epicStory.title}`);
 
       // Check if story already completed (from johnny-bmad state or sprint-status)
-      if (state!.stories.completed.includes(epicStory.id) || epicStory.status === 'done') {
+      if (state?.stories.completed.includes(epicStory.id) || epicStory.status === 'done') {
         info('Story already completed, skipping');
         continue;
       }
@@ -247,16 +277,18 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         try {
           await runStoryCreator(cwd, epicStory, selectedEpic.id);
         } catch (createError) {
-          const errorMessage = createError instanceof Error ? createError.message : String(createError);
+          const errorMessage =
+            createError instanceof Error ? createError.message : String(createError);
           error(`Story creator failed: ${errorMessage}`);
           warn('Retrying story creation...');
 
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           try {
             await runStoryCreator(cwd, epicStory, selectedEpic.id);
           } catch (retryError) {
-            const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : String(retryError);
             error(`Story creator failed on retry: ${retryMessage}`);
             error('Saving state and exiting. Run johnny-bmad again to resume.');
             await saveState(cwd, state!);
@@ -292,12 +324,13 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
           warn('Claude CLI may have encountered an API error. Retrying...');
 
           // Wait a moment before retry
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           try {
             await runDevAgent(cwd, story.id, story.filePath);
           } catch (retryError) {
-            const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : String(retryError);
             error(`Dev agent failed on retry: ${retryMessage}`);
             error('Saving state and exiting. Run johnny-bmad again to resume.');
             await saveState(cwd, state!);
@@ -310,17 +343,19 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
         try {
           reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
         } catch (reviewError) {
-          const errorMessage = reviewError instanceof Error ? reviewError.message : String(reviewError);
+          const errorMessage =
+            reviewError instanceof Error ? reviewError.message : String(reviewError);
           error(`Review agent failed: ${errorMessage}`);
           warn('Claude CLI may have encountered an API error. Retrying...');
 
           // Wait a moment before retry
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           try {
             reviewResult = await runReviewAgent(cwd, story.id, story.filePath);
           } catch (retryError) {
-            const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : String(retryError);
             error(`Review agent failed on retry: ${retryMessage}`);
             error('Saving state and exiting. Run johnny-bmad again to resume.');
             await saveState(cwd, state!);
@@ -407,12 +442,12 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     step(4, 4, 'Epic implementation complete');
 
     // Mark epic and all stories as done in sprint-status.yaml
-    const allStoryIds = selectedEpic.stories.map(s => s.id);
+    const allStoryIds = selectedEpic.stories.map((s) => s.id);
     await markEpicComplete(cwd, selectedEpic.id, allStoryIds);
 
     header('Epic Complete');
     successWithTiming(`Epic ${selectedEpic.id} finished!`);
-    success(`Completed ${state!.stories.completed.length} stories (total: ${getSessionElapsed()})`);
+    success(`Completed ${state?.stories.completed.length} stories (total: ${getSessionElapsed()})`);
 
     // Clear state for this epic
     await clearState(cwd);

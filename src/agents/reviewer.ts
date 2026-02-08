@@ -1,10 +1,17 @@
-import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { parse as parseYaml } from 'yaml';
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import chalk from 'chalk';
+import { parse as parseYaml } from 'yaml';
 import { getReviewStoryPrompt } from '../claude/prompts.js';
-import { info, subHeader, debug, infoWithTiming, isVerbose, agentLifecycle } from '../utils/logger.js';
+import {
+  agentLifecycle,
+  debug,
+  info,
+  infoWithTiming,
+  isVerbose,
+  subHeader,
+} from '../utils/logger.js';
 import { createLabeledStream } from '../utils/stream-wrapper.js';
 
 export interface ReviewResult {
@@ -38,7 +45,7 @@ export function runReviewAgent(
       ['--model', 'opus', '-p', prompt, '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep'],
       {
         cwd,
-        stdio: ['pipe', 'pipe', verbose ? 'pipe' : 'inherit']
+        stdio: ['pipe', 'pipe', verbose ? 'pipe' : 'inherit'],
       }
     );
 
@@ -69,8 +76,9 @@ export function runReviewAgent(
         const chunk = data.toString();
         const lines = chunk.split('\n');
         const color = chalk.yellow; // Review agent color
-        for (const line of lines.slice(0, -1)) { // Skip last empty line
-          process.stdout.write(color('[Review] ') + line + '\n');
+        for (const line of lines.slice(0, -1)) {
+          // Skip last empty line
+          process.stdout.write(`${color('[Review] ') + line}\n`);
         }
         // Handle incomplete last line
         if (lines[lines.length - 1]) {
@@ -81,7 +89,7 @@ export function runReviewAgent(
       }
     });
 
-    proc.on('close', (code, signal) => {
+    proc.on('close', (code, _signal) => {
       // Clean up signal handlers
       process.removeListener('SIGINT', onSignal);
       process.removeListener('SIGTERM', onSignal);

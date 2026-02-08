@@ -1,1 +1,6 @@
-export function displayError(errorType: string, description: string, context: string, recoveryCmd: string): void {}
+export function displayError(
+  _errorType: string,
+  _description: string,
+  _context: string,
+  _recoveryCmd: string
+): void {}

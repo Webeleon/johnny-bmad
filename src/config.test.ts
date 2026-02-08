@@ -1,10 +1,29 @@
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { writeFile, unlink, rm, mkdtemp, readFile, access, mkdir } from 'fs/promises';
-import * as fsPromises from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { loadState, saveState, createInitialState, getStateFilePath, clearState, migrateV0toV1, promptMigration, isValidState, isLegacyState, isHybridState, MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError, CorruptStateError, promptCorruptRecovery, attemptPartialRecovery, RECOVERY_DEFAULT_EPIC } from './config.js';
-import type { State, LegacyState } from './types.js';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import * as fsPromises from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  attemptPartialRecovery,
+  CorruptStateError,
+  clearState,
+  createInitialState,
+  getStateFilePath,
+  isHybridState,
+  isLegacyState,
+  isValidState,
+  loadState,
+  MigrationDeclinedError,
+  MigrationSaveError,
+  migrateV0toV1,
+  NonInteractiveError,
+  promptCorruptRecovery,
+  promptMigration,
+  RECOVERY_DEFAULT_EPIC,
+  StatePermissionError,
+  saveState,
+} from './config.js';
+import type { LegacyState, State } from './types.js';
 
 let TEST_DIR: string;
 const STATE_FILE = '.johnny-bmad-state.json';
@@ -73,7 +92,7 @@ describe('config.ts - State Management', () => {
       const originalEpic = state.currentEpic;
 
       // Wait 10ms to ensure timestamp would change if mutation occurred
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await saveState(TEST_DIR, state);
 
@@ -151,7 +170,11 @@ describe('config.ts - State Management', () => {
     });
 
     test('should load state with all workflow phases', async () => {
-      const phases: Array<'story-creation' | 'review' | 'implementation'> = ['story-creation', 'review', 'implementation'];
+      const phases: Array<'story-creation' | 'review' | 'implementation'> = [
+        'story-creation',
+        'review',
+        'implementation',
+      ];
 
       for (const phase of phases) {
         const state = createInitialState('epic-1');
@@ -178,7 +201,7 @@ describe('config.ts - State Management', () => {
       state.stories.approvals = {
         'story-1': 'approved',
         'story-2': 'needs-changes',
-        'story-3': 'pending'
+        'story-3': 'pending',
       };
       await saveState(TEST_DIR, state);
 
@@ -192,8 +215,12 @@ describe('config.ts - State Management', () => {
   describe('loadState() - Corrupted State', () => {
     // Suppress warn() output from loadState() invalid structure detection
     let consoleSpy: ReturnType<typeof spyOn>;
-    beforeEach(() => { consoleSpy = spyOn(console, 'log').mockImplementation(() => {}); });
-    afterEach(() => { consoleSpy.mockRestore(); });
+    beforeEach(() => {
+      consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
 
     test('should return null for corrupted JSON (after user chooses delete)', async () => {
       const originalIsTTY = process.stdin.isTTY;
@@ -202,7 +229,9 @@ describe('config.ts - State Management', () => {
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '{ invalid json content }', 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -220,7 +249,9 @@ describe('config.ts - State Management', () => {
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '', 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -238,7 +269,9 @@ describe('config.ts - State Management', () => {
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '"just a string"', 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -256,7 +289,9 @@ describe('config.ts - State Management', () => {
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, '[]', 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -274,7 +309,9 @@ describe('config.ts - State Management', () => {
       const path = getStateFilePath(TEST_DIR);
       await writeFile(path, 'null', 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -289,8 +326,12 @@ describe('config.ts - State Management', () => {
   describe('loadState() - Invalid State Structure (with partial recovery)', () => {
     // Suppress warn() output from loadState() invalid structure detection
     let consoleSpy: ReturnType<typeof spyOn>;
-    beforeEach(() => { consoleSpy = spyOn(console, 'log').mockImplementation(() => {}); });
-    afterEach(() => { consoleSpy.mockRestore(); });
+    beforeEach(() => {
+      consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
 
     test('should recover when missing workflow object', async () => {
       const originalIsTTY = process.stdin.isTTY;
@@ -300,12 +341,14 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        stories: { completed: [], approvals: {} }
+        stories: { completed: [], approvals: {} },
         // Missing workflow object
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -327,12 +370,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         // Missing stories object
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -355,12 +405,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'invalid-mode', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'invalid-mode',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -384,12 +441,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'invalid-phase', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'invalid-phase',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -413,12 +477,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: 'not-an-array', approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: 'not-an-array', approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -442,12 +513,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 'not-a-number', devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 'not-a-number',
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -471,17 +549,24 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: [],
           approvals: {
-            'story-1': 'invalid-status' // Not a valid StoryApprovalStatus
-          }
-        }
+            'story-1': 'invalid-status', // Not a valid StoryApprovalStatus
+          },
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -504,19 +589,26 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: ['story-1', 'story-2'],
           approvals: {
             'story-1': 'approved', // Valid
             'story-2': 'garbage', // Invalid - should reject entire state
-            'story-3': 'pending'  // Valid
-          }
-        }
+            'story-3': 'pending', // Valid
+          },
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -540,11 +632,13 @@ describe('config.ts - State Management', () => {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
         workflow: [1, 2, 3], // Array instead of object
-        stories: { completed: [], approvals: {} }
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -568,15 +662,22 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: [],
-          approvals: ['invalid', 'array'] // Array instead of object
-        }
+          approvals: ['invalid', 'array'], // Array instead of object
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -599,12 +700,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: '',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -627,12 +735,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: '   ',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -655,12 +770,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: '',
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -683,15 +805,22 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: ['story-1', 123, 'story-2'], // 123 is not a string
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -714,15 +843,22 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: ['story-1', null, 'story-2'], // null is not a string
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -745,12 +881,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: -1, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: -1,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -773,12 +916,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: -5 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: -5,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -801,15 +951,22 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: ['story-1', '', 'story-2'], // Empty string is invalid
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -832,15 +989,22 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
         stories: {
           completed: ['story-1', '   ', 'story-2'], // Whitespace-only is invalid
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -863,12 +1027,19 @@ describe('config.ts - State Management', () => {
       const invalidState = {
         currentEpic: 'epic-1',
         lastUpdated: 'not-a-valid-date', // Invalid date string
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -893,11 +1064,13 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: 'invalid-timestamp' // Invalid date string
+        lastUpdated: 'invalid-timestamp', // Invalid date string
       };
       await writeFile(path, JSON.stringify(invalidLegacyState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        accept: true,
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -917,8 +1090,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: validDate,
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -934,8 +1112,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 5, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 5,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -949,8 +1132,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 3 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 3,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -964,8 +1152,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 999, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 999,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -979,8 +1172,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 100 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 100,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -994,8 +1192,13 @@ describe('config.ts - State Management', () => {
       const validState = {
         currentEpic: 'epic-1',
         lastUpdated: new Date().toISOString(),
-        workflow: { mode: 'sequential', phase: 'implementation', currentStoryIndex: 0, devReviewIteration: 0 },
-        stories: { completed: [], approvals: {} }
+        workflow: {
+          mode: 'sequential',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: { completed: [], approvals: {} },
       };
       await writeFile(path, JSON.stringify(validState), 'utf-8');
 
@@ -1009,8 +1212,12 @@ describe('config.ts - State Management', () => {
   describe('loadState() - Legacy v0.2.0 State Migration Integration', () => {
     // Suppress warn() output from loadState() invalid structure detection
     let consoleSpy: ReturnType<typeof spyOn>;
-    beforeEach(() => { consoleSpy = spyOn(console, 'log').mockImplementation(() => {}); });
-    afterEach(() => { consoleSpy.mockRestore(); });
+    beforeEach(() => {
+      consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
 
     // RATIONALE: Interactive migration prompt tests cannot be automated
     //
@@ -1040,11 +1247,13 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1', 123, 'story-2'], // 123 is not a string
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -1065,11 +1274,13 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1', '', 'story-2'], // Empty string is invalid
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -1090,11 +1301,13 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1', '   ', 'story-2'], // Whitespace-only is invalid
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
       await writeFile(path, JSON.stringify(legacyState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
@@ -1117,24 +1330,28 @@ describe('config.ts - State Management', () => {
         devReviewIteration: 0,
         completedStories: ['story-1', 'story-2'], // v0.2.0 field
         lastUpdated: new Date().toISOString(),
-        workflow: {  // v1+ field
+        workflow: {
+          // v1+ field
           mode: 'sequential' as const,
           phase: 'implementation' as const,
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
-        stories: {  // v1+ field
+        stories: {
+          // v1+ field
           completed: ['story-1'],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       await writeFile(path, JSON.stringify(hybridState), 'utf-8');
 
-      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+      const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+        option: '1',
+      });
 
       try {
         const loaded = await loadState(TEST_DIR);
-      // isLegacyState() should reject hybrid states (line 75 check: if 'workflow' in state || 'stories' in state)
+        // isLegacyState() should reject hybrid states (line 75 check: if 'workflow' in state || 'stories' in state)
         expect(loaded).toBeNull();
       } finally {
         process.stdin.isTTY = originalIsTTY;
@@ -1169,7 +1386,7 @@ describe('config.ts - State Management', () => {
       const state = createInitialState('epic-1');
       await saveState(TEST_DIR, state);
 
-      const path = getStateFilePath(TEST_DIR);
+      const _path = getStateFilePath(TEST_DIR);
 
       // Use spyOn on statically-imported module (consistent with Round 21 pattern)
       const unlinkSpy = spyOn(fsPromises, 'unlink').mockImplementation(async () => {
@@ -1200,7 +1417,7 @@ describe('config.ts - State Management', () => {
       const state = createInitialState('epic-1');
       await saveState(TEST_DIR, state);
 
-      const path = getStateFilePath(TEST_DIR);
+      const _path = getStateFilePath(TEST_DIR);
 
       // Use spyOn on statically-imported module (consistent with Round 21 pattern)
       const unlinkSpy = spyOn(fsPromises, 'unlink').mockImplementation(async () => {
@@ -1235,7 +1452,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1250,7 +1467,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: timestamp
+        lastUpdated: timestamp,
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1264,7 +1481,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 7,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1278,7 +1495,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 3,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1293,7 +1510,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 3,
         devReviewIteration: 0,
         completedStories: completed,
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1309,7 +1526,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 3,
         devReviewIteration: 0,
         completedStories: completed,
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1329,7 +1546,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1343,7 +1560,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1357,7 +1574,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1', 'story-2'],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1373,22 +1590,22 @@ describe('config.ts - State Management', () => {
           currentStoryIndex: 0,
           devReviewIteration: 0,
           completedStories: [],
-          lastUpdated: '2026-02-04T10:30:00.000Z'
+          lastUpdated: '2026-02-04T10:30:00.000Z',
         },
         {
           currentEpic: 'epic-complex-feature',
           currentStoryIndex: 10,
           devReviewIteration: 5,
           completedStories: ['story-1', 'story-2', 'story-3', 'story-4', 'story-5'],
-          lastUpdated: '2026-12-31T23:59:59.999Z'
+          lastUpdated: '2026-12-31T23:59:59.999Z',
         },
         {
           currentEpic: 'epic-x',
           currentStoryIndex: 999,
           devReviewIteration: 100,
           completedStories: ['a', 'b', 'c'],
-          lastUpdated: '2020-01-01T00:00:00.000Z' // Edge case: test migration handles old legacy state files
-        }
+          lastUpdated: '2020-01-01T00:00:00.000Z', // Edge case: test migration handles old legacy state files
+        },
       ];
 
       for (const legacy of fixtures) {
@@ -1412,7 +1629,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1427,7 +1644,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:30:00.000Z'
+        lastUpdated: '2026-02-04T10:30:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1444,7 +1661,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 5,
         devReviewIteration: 2,
         completedStories: ['story-1', 'story-2', 'story-3'],
-        lastUpdated: '2026-02-04T12:00:00.000Z'
+        lastUpdated: '2026-02-04T12:00:00.000Z',
       };
 
       const migrated = migrateV0toV1(legacy);
@@ -1472,7 +1689,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: legacyTimestamp
+        lastUpdated: legacyTimestamp,
       };
 
       // Mock process.stdin.isTTY to bypass TTY check
@@ -1480,12 +1697,14 @@ describe('config.ts - State Management', () => {
       Object.defineProperty(process.stdin, 'isTTY', {
         value: true,
         writable: true,
-        configurable: true
+        configurable: true,
       });
 
       // Mock inquirer.default.prompt (default export) to auto-confirm migration
       const inquirerModule = await import('inquirer');
-      const promptSpy = spyOn(inquirerModule.default, 'prompt').mockResolvedValueOnce({ confirmed: true });
+      const promptSpy = spyOn(inquirerModule.default, 'prompt').mockResolvedValueOnce({
+        confirmed: true,
+      });
 
       try {
         // Call promptMigration (will save to disk)
@@ -1502,14 +1721,14 @@ describe('config.ts - State Management', () => {
         // Verify returned timestamp matches what's on disk (no drift)
         const diskState = await loadState(TEST_DIR);
         expect(diskState).not.toBeNull();
-        expect(migratedState.lastUpdated).toBe(diskState!.lastUpdated);
+        expect(migratedState.lastUpdated).toBe(diskState?.lastUpdated);
       } finally {
         promptSpy.mockRestore();
         // Restore original TTY state
         Object.defineProperty(process.stdin, 'isTTY', {
           value: originalIsTTY,
           writable: true,
-          configurable: true
+          configurable: true,
         });
       }
     });
@@ -1527,12 +1746,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(validState)).toBe(true);
@@ -1544,8 +1763,8 @@ describe('config.ts - State Management', () => {
         lastUpdated: '2026-02-04T10:00:00.000Z',
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1559,8 +1778,8 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
-        }
+          devReviewIteration: 0,
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1575,12 +1794,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(hybridState as any)).toBe(false);
@@ -1594,12 +1813,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: NaN,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1613,12 +1832,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: Infinity
+          devReviewIteration: Infinity,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1632,12 +1851,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 3.7,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1651,12 +1870,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1670,12 +1889,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(invalidState as any)).toBe(false);
@@ -1689,12 +1908,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: [],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
 
       expect(isValidState(validState as any)).toBe(true);
@@ -1708,7 +1927,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(legacyState)).toBe(true);
@@ -1718,7 +1937,7 @@ describe('config.ts - State Management', () => {
       const invalidLegacy = {
         currentEpic: 'epic-1',
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
         // Missing currentStoryIndex and devReviewIteration
       };
 
@@ -1732,12 +1951,13 @@ describe('config.ts - State Management', () => {
         devReviewIteration: 0,
         completedStories: ['story-1'],
         lastUpdated: '2026-02-04T10:00:00.000Z',
-        workflow: { // v1+ field
+        workflow: {
+          // v1+ field
           mode: 'sequential',
           phase: 'implementation',
           currentStoryIndex: 0,
-          devReviewIteration: 0
-        }
+          devReviewIteration: 0,
+        },
       };
 
       expect(isLegacyState(hybridState as any)).toBe(false);
@@ -1749,7 +1969,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: -1, // Invalid: negative
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1761,7 +1981,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: -1, // Invalid: negative
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1773,7 +1993,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: NaN,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1785,7 +2005,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: Infinity,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1797,7 +2017,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 2.5,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1809,7 +2029,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1821,7 +2041,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(invalidLegacy as any)).toBe(false);
@@ -1833,7 +2053,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       expect(isLegacyState(validLegacy as any)).toBe(true);
@@ -1859,7 +2079,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1', 'story-2'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       // Verify the underlying migration logic (what promptMigration delegates to)
@@ -1879,7 +2099,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: [],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
 
       try {
@@ -1887,7 +2107,7 @@ describe('config.ts - State Management', () => {
         Object.defineProperty(process.stdin, 'isTTY', {
           value: undefined,
           writable: true,
-          configurable: true
+          configurable: true,
         });
 
         // Mock console output to suppress logger output during test
@@ -1919,7 +2139,7 @@ describe('config.ts - State Management', () => {
         Object.defineProperty(process.stdin, 'isTTY', {
           value: originalIsTTY,
           writable: true,
-          configurable: true
+          configurable: true,
         });
       }
     });
@@ -2017,7 +2237,7 @@ describe('config.ts - State Management', () => {
         currentStoryIndex: 0,
         devReviewIteration: 0,
         completedStories: ['story-1'],
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
       expect(isHybridState(pureV0State)).toBe(false);
     });
@@ -2030,12 +2250,12 @@ describe('config.ts - State Management', () => {
           mode: 'sequential' as const,
           phase: 'implementation' as const,
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
         stories: {
           completed: ['story-1'],
-          approvals: {}
-        }
+          approvals: {},
+        },
       };
       expect(isHybridState(pureV1State)).toBe(false);
     });
@@ -2045,17 +2265,19 @@ describe('config.ts - State Management', () => {
         currentEpic: 'epic-1',
         currentStoryIndex: 0, // v0.2.0 field
         completedStories: ['story-1'], // v0.2.0 field
-        workflow: { // v1+ field
+        workflow: {
+          // v1+ field
           mode: 'sequential' as const,
           phase: 'implementation' as const,
           currentStoryIndex: 0,
-          devReviewIteration: 0
+          devReviewIteration: 0,
         },
-        stories: { // v1+ field
+        stories: {
+          // v1+ field
           completed: ['story-1'],
-          approvals: {}
+          approvals: {},
         },
-        lastUpdated: '2026-02-04T10:00:00.000Z'
+        lastUpdated: '2026-02-04T10:00:00.000Z',
       };
       expect(isHybridState(hybridState)).toBe(true);
     });
@@ -2067,12 +2289,13 @@ describe('config.ts - State Management', () => {
     test('should return true for partial hybrid (single v0 field + single v1 field)', () => {
       const partialHybrid = {
         completedStories: ['story-1'], // v0.2.0 field
-        workflow: { // v1+ field
+        workflow: {
+          // v1+ field
           mode: 'sequential' as const,
           phase: 'implementation' as const,
           currentStoryIndex: 0,
-          devReviewIteration: 0
-        }
+          devReviewIteration: 0,
+        },
       };
       expect(isHybridState(partialHybrid)).toBe(true);
     });
@@ -2113,11 +2336,7 @@ describe('config.ts - State Management', () => {
           await saveState(TEST_DIR, state);
 
           // Verify write sequence: writeFile to .tmp, then rename to final
-          expect(writeFileSpy).toHaveBeenCalledWith(
-            tmpPath,
-            expect.any(String),
-            'utf-8'
-          );
+          expect(writeFileSpy).toHaveBeenCalledWith(tmpPath, expect.any(String), 'utf-8');
           expect(renameSpy).toHaveBeenCalledWith(tmpPath, statePath);
 
           // Verify rename called AFTER writeFile (atomic sequence)
@@ -2193,9 +2412,7 @@ describe('config.ts - State Management', () => {
           expect(unlinkSpy).toHaveBeenCalledWith(tmpPath);
 
           // Verify the ENOENT debug branch was hit (lines 465-466)
-          expect(debugSpy).toHaveBeenCalledWith(
-            expect.stringContaining('No temp file to cleanup')
-          );
+          expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('No temp file to cleanup'));
           expect(debugSpy).toHaveBeenCalledWith(
             expect.stringContaining(`writeFile likely failed before creating ${tmpPath}`)
           );
@@ -2270,7 +2487,7 @@ describe('config.ts - State Management', () => {
           'story-2': 'approved',
           'story-3': 'needs-changes',
           'story-4': 'approved',
-          'story-5': 'pending'
+          'story-5': 'pending',
         };
 
         // Warm-up write to reduce cold-start variance (especially in CI)
@@ -2300,8 +2517,8 @@ describe('config.ts - State Management', () => {
         expect(loaded).not.toBeNull();
         expect(isValidState(loaded!)).toBe(true);
         // Final state should be epic-5 (last write)
-        expect(loaded!.currentEpic).toBe('epic-5');
-        expect(loaded!.workflow.currentStoryIndex).toBe(5);
+        expect(loaded?.currentEpic).toBe('epic-5');
+        expect(loaded?.workflow.currentStoryIndex).toBe(5);
       });
 
       test('should produce state that loadState() can read (round-trip)', async () => {
@@ -2315,11 +2532,11 @@ describe('config.ts - State Management', () => {
         const loaded = await loadState(TEST_DIR);
 
         expect(loaded).not.toBeNull();
-        expect(loaded!.currentEpic).toBe('epic-round-trip');
-        expect(loaded!.workflow.currentStoryIndex).toBe(5);
-        expect(loaded!.workflow.devReviewIteration).toBe(2);
-        expect(loaded!.stories.completed).toEqual(['story-1', 'story-2', 'story-3']);
-        expect(loaded!.stories.approvals).toEqual({ 'story-1': 'approved' });
+        expect(loaded?.currentEpic).toBe('epic-round-trip');
+        expect(loaded?.workflow.currentStoryIndex).toBe(5);
+        expect(loaded?.workflow.devReviewIteration).toBe(2);
+        expect(loaded?.stories.completed).toEqual(['story-1', 'story-2', 'story-3']);
+        expect(loaded?.stories.approvals).toEqual({ 'story-1': 'approved' });
       });
     });
 
@@ -2389,7 +2606,9 @@ describe('config.ts - State Management', () => {
         expect(loaded).toBeNull();
 
         // Verify .tmp file still exists (not accidentally deleted)
-        const tmpExists = await access(tmpPath).then(() => true).catch(() => false);
+        const tmpExists = await access(tmpPath)
+          .then(() => true)
+          .catch(() => false);
         expect(tmpExists).toBe(true);
       });
 
@@ -2406,7 +2625,7 @@ describe('config.ts - State Management', () => {
         // loadState() should read the valid state file, not the .tmp
         const loaded = await loadState(TEST_DIR);
         expect(loaded).not.toBeNull();
-        expect(loaded!.currentEpic).toBe('epic-valid');
+        expect(loaded?.currentEpic).toBe('epic-valid');
       });
 
       test('should produce valid state after simulated crash during saveState()', async () => {
@@ -2430,7 +2649,7 @@ describe('config.ts - State Management', () => {
         expect(isValidState(loaded!)).toBe(true);
 
         // After crash, old state should still be present (atomic guarantee)
-        expect(loaded!.currentEpic).toBe('epic-first');
+        expect(loaded?.currentEpic).toBe('epic-first');
       });
     });
 
@@ -2453,7 +2672,7 @@ describe('config.ts - State Management', () => {
             state.stories.approvals = {
               'story-1': 'approved',
               'story-2': 'needs-changes',
-              'story-3': 'pending'
+              'story-3': 'pending',
             };
             return state;
           })(),
@@ -2463,7 +2682,7 @@ describe('config.ts - State Management', () => {
             const state = createInitialState('epic-large');
             state.stories.completed = Array.from({ length: 50 }, (_, i) => `story-${i + 1}`);
             return state;
-          })()
+          })(),
         ];
 
         // Save and load each complexity level
@@ -2472,8 +2691,8 @@ describe('config.ts - State Management', () => {
           const loaded = await loadState(TEST_DIR);
 
           expect(loaded).not.toBeNull();
-          expect(loaded!.currentEpic).toBe(state.currentEpic);
-          expect(loaded!.stories.completed.length).toBe(state.stories.completed.length);
+          expect(loaded?.currentEpic).toBe(state.currentEpic);
+          expect(loaded?.stories.completed.length).toBe(state.stories.completed.length);
         }
       });
 
@@ -2502,7 +2721,9 @@ describe('config.ts - State Management', () => {
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           await promptCorruptRecovery(TEST_DIR);
@@ -2512,7 +2733,7 @@ describe('config.ts - State Management', () => {
           expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
 
           // Verify the actual corrupt state message appears in output
-          const allOutput = consoleSpy.mock.calls.map(call => call.join(' ')).join('\n');
+          const allOutput = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
           expect(allOutput).toContain('Corrupt state file detected');
         } finally {
           process.stdin.isTTY = originalIsTTY;
@@ -2525,7 +2746,9 @@ describe('config.ts - State Management', () => {
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           await promptCorruptRecovery(TEST_DIR);
@@ -2550,7 +2773,9 @@ describe('config.ts - State Management', () => {
         const state = createInitialState('epic-1');
         await saveState(TEST_DIR, state);
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           const result = await promptCorruptRecovery(TEST_DIR);
@@ -2570,7 +2795,9 @@ describe('config.ts - State Management', () => {
         const originalIsTTY = process.stdin.isTTY;
         process.stdin.isTTY = true; // Mock TTY for interactive tests
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '2' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '2',
+        });
 
         try {
           let caughtError: Error | null = null;
@@ -2621,7 +2848,9 @@ describe('config.ts - State Management', () => {
         const path = getStateFilePath(TEST_DIR);
         await writeFile(path, '{ invalid json }', 'utf-8');
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           const result = await loadState(TEST_DIR);
@@ -2642,7 +2871,9 @@ describe('config.ts - State Management', () => {
         const path = getStateFilePath(TEST_DIR);
         await writeFile(path, '{ not valid json', 'utf-8');
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           const result = await loadState(TEST_DIR);
@@ -2664,7 +2895,9 @@ describe('config.ts - State Management', () => {
         const path = getStateFilePath(TEST_DIR);
         await writeFile(path, '{ malformed', 'utf-8');
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '2' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '2',
+        });
 
         try {
           let caughtError: Error | null = null;
@@ -2691,11 +2924,13 @@ describe('config.ts - State Management', () => {
           currentEpic: 'epic-1',
           lastUpdated: new Date().toISOString(),
           workflow: { mode: 'invalid-mode' }, // Invalid workflow
-          stories: { completed: [], approvals: {} }
+          stories: { completed: [], approvals: {} },
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           const result = await attemptPartialRecovery(partialState, TEST_DIR);
@@ -2721,13 +2956,15 @@ describe('config.ts - State Management', () => {
             mode: 'batch',
             phase: 'review',
             currentStoryIndex: 2,
-            devReviewIteration: 1
+            devReviewIteration: 1,
           },
-          stories: { completed: ['story-1'], approvals: {} }
+          stories: { completed: ['story-1'], approvals: {} },
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           const result = await attemptPartialRecovery(partialState, TEST_DIR);
@@ -2758,13 +2995,15 @@ describe('config.ts - State Management', () => {
             mode: 'batch',
             phase: 'review',
             currentStoryIndex: 2,
-            devReviewIteration: 1
+            devReviewIteration: 1,
           },
-          stories: { completed: 'not-an-array' } // Invalid stories
+          stories: { completed: 'not-an-array' }, // Invalid stories
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           const result = await attemptPartialRecovery(partialState, TEST_DIR);
@@ -2788,17 +3027,19 @@ describe('config.ts - State Management', () => {
           currentEpic: 'epic-1',
           lastUpdated: new Date().toISOString(),
           workflow: { mode: 'invalid' },
-          stories: { completed: [], approvals: {} }
+          stories: { completed: [], approvals: {} },
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           await attemptPartialRecovery(partialState, TEST_DIR);
 
           // Verify warn() displays both recovered and lost fields
-          const allOutput = consoleSpy.mock.calls.map(call => call.join(' ')).join('\n');
+          const allOutput = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
           expect(allOutput).toContain('Recovered fields:');
           expect(allOutput).toContain('Lost fields:');
         } finally {
@@ -2814,11 +3055,13 @@ describe('config.ts - State Management', () => {
 
         const completelyInvalidState = {
           // Missing currentEpic
-          invalidField: 'invalid'
+          invalidField: 'invalid',
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ option: '1' });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          option: '1',
+        });
 
         try {
           const result = await attemptPartialRecovery(completelyInvalidState, TEST_DIR);
@@ -2838,12 +3081,14 @@ describe('config.ts - State Management', () => {
 
         const partialState = {
           currentEpic: 'epic-1',
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date().toISOString(),
           // Missing workflow and stories
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           const result = await attemptPartialRecovery(partialState, TEST_DIR);
@@ -2866,7 +3111,7 @@ describe('config.ts - State Management', () => {
 
         const partialState = {
           currentEpic: 'epic-1',
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date().toISOString(),
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
@@ -2897,13 +3142,15 @@ describe('config.ts - State Management', () => {
             mode: 'sequential',
             phase: 'implementation',
             currentStoryIndex: 0,
-            devReviewIteration: 0
+            devReviewIteration: 0,
           },
-          stories: { completed: [], approvals: {} }
+          stories: { completed: [], approvals: {} },
         };
 
         const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         // Mock saveState to reject with a permission error
         const configModule = await import('./config.js');
@@ -2912,16 +3159,22 @@ describe('config.ts - State Management', () => {
         );
 
         try {
-          await expect(attemptPartialRecovery(partialState, TEST_DIR)).rejects.toThrow(configModule.MigrationSaveError);
+          await expect(attemptPartialRecovery(partialState, TEST_DIR)).rejects.toThrow(
+            configModule.MigrationSaveError
+          );
 
           // Verify error message contains expected text
           try {
             await attemptPartialRecovery(partialState, TEST_DIR);
           } catch (error) {
             expect(error).toBeInstanceOf(configModule.MigrationSaveError);
-            expect((error as Error).message).toContain('Partial recovery completed but failed to save new state file');
+            expect((error as Error).message).toContain(
+              'Partial recovery completed but failed to save new state file'
+            );
             if (error && typeof error === 'object' && 'recovery' in error) {
-              expect((error as any).recovery).toContain('Try: Fix disk/permissions and restart to retry recovery');
+              expect((error as any).recovery).toContain(
+                'Try: Fix disk/permissions and restart to retry recovery'
+              );
             }
           }
         } finally {
@@ -2942,11 +3195,13 @@ describe('config.ts - State Management', () => {
         const invalidState = {
           currentEpic: 'epic-1',
           lastUpdated: new Date().toISOString(),
-          workflow: { mode: 'invalid-mode' }
+          workflow: { mode: 'invalid-mode' },
         };
         await writeFile(path, JSON.stringify(invalidState), 'utf-8');
 
-        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({ accept: true });
+        const inquirerSpy = spyOn((await import('inquirer')).default, 'prompt').mockResolvedValue({
+          accept: true,
+        });
 
         try {
           const result = await loadState(TEST_DIR);
@@ -2963,7 +3218,11 @@ describe('config.ts - State Management', () => {
 
     describe('Valid state 100% restore guarantee (AC #3)', () => {
       test('should restore exact state for all workflow modes', async () => {
-        const modes: Array<'sequential' | 'batch' | 'dev-only'> = ['sequential', 'batch', 'dev-only'];
+        const modes: Array<'sequential' | 'batch' | 'dev-only'> = [
+          'sequential',
+          'batch',
+          'dev-only',
+        ];
 
         for (const mode of modes) {
           const state = createInitialState('epic-test');
@@ -2982,7 +3241,11 @@ describe('config.ts - State Management', () => {
       });
 
       test('should restore exact state for all workflow phases', async () => {
-        const phases: Array<'story-creation' | 'review' | 'implementation'> = ['story-creation', 'review', 'implementation'];
+        const phases: Array<'story-creation' | 'review' | 'implementation'> = [
+          'story-creation',
+          'review',
+          'implementation',
+        ];
 
         for (const phase of phases) {
           const state = createInitialState('epic-test');
@@ -3008,7 +3271,7 @@ describe('config.ts - State Management', () => {
         state.stories.approvals = {
           'story-1': 'approved',
           'story-2': 'needs-changes',
-          'story-3': 'pending'
+          'story-3': 'pending',
         };
 
         await saveState(TEST_DIR, state);
@@ -3024,7 +3287,7 @@ describe('config.ts - State Management', () => {
         expect(loaded?.stories.approvals).toEqual({
           'story-1': 'approved',
           'story-2': 'needs-changes',
-          'story-3': 'pending'
+          'story-3': 'pending',
         });
       });
 
@@ -3051,5 +3314,4 @@ describe('config.ts - State Management', () => {
       });
     });
   });
-
 });

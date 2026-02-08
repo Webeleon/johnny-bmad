@@ -1,6 +1,12 @@
 #!/usr/bin/env node
+import {
+  CorruptStateError,
+  MigrationDeclinedError,
+  MigrationSaveError,
+  NonInteractiveError,
+  StatePermissionError,
+} from './config.js';
 import { runOrchestrator } from './orchestrator.js';
-import { MigrationDeclinedError, NonInteractiveError, StatePermissionError, MigrationSaveError, CorruptStateError } from './config.js';
 import type { CliArgs } from './types.js';
 
 // Global handler for unhandled promise rejections
@@ -29,7 +35,7 @@ export function parseArgs(argv: string[]): CliArgs {
     verbose: false,
     yolo: false,
     batch: false,
-    devOnly: false
+    devOnly: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -52,7 +58,7 @@ export function parseArgs(argv: string[]): CliArgs {
         const nextArg = argv[i + 1];
         if (nextArg && !nextArg.startsWith('-')) {
           const value = parseInt(nextArg, 10);
-          if (!isNaN(value) && value > 0) {
+          if (!Number.isNaN(value) && value > 0) {
             args.maxIterations = value;
             i++; // Skip the value argument
           }
@@ -154,24 +160,28 @@ export function formatErrorWithRecovery(err: unknown): { message: string; recove
   // Handle filesystem errors with specific recovery guidance (Rule 5)
   // Type guard: NodeJS.ErrnoException has string code property
   // Use documented cast to Record<string, unknown> to check code property safely
-  if (err instanceof Error && 'code' in err && typeof (err as Record<string, unknown>).code === 'string') {
+  if (
+    err instanceof Error &&
+    'code' in err &&
+    typeof (err as Record<string, unknown>).code === 'string'
+  ) {
     const fsError = err as NodeJS.ErrnoException;
 
     if (fsError.code === 'ENOSPC') {
       return {
         message: '[ERROR] Operation failed: disk is full',
-        recovery: '        Try: Free up disk space and run johnny-bmad again'
+        recovery: '        Try: Free up disk space and run johnny-bmad again',
       };
     } else if (fsError.code === 'EACCES') {
       return {
         message: '[ERROR] Operation failed: permission denied',
-        recovery: '        Try: Check file permissions or run with appropriate access rights'
+        recovery: '        Try: Check file permissions or run with appropriate access rights',
       };
     } else {
       // Other filesystem errors with generic recovery
       return {
         message: `[ERROR] Fatal error: ${fsError.message}`,
-        recovery: '        Try: Run johnny-bmad again to resume from saved state'
+        recovery: '        Try: Run johnny-bmad again to resume from saved state',
       };
     }
   }
@@ -179,7 +189,7 @@ export function formatErrorWithRecovery(err: unknown): { message: string; recove
   // Generic fatal error handling
   return {
     message: `[ERROR] Fatal error: ${err instanceof Error ? err.message : String(err)}`,
-    recovery: '        Try: Run johnny-bmad again to resume from saved state'
+    recovery: '        Try: Run johnny-bmad again to resume from saved state',
   };
 }
 
@@ -219,7 +229,11 @@ export async function main(): Promise<void> {
      * This separation ensures migration UX remains clean while other errors
      * get actionable recovery guidance following Rule 5 (Try: pattern).
      */
-    if (err instanceof MigrationDeclinedError || err instanceof NonInteractiveError || err instanceof CorruptStateError) {
+    if (
+      err instanceof MigrationDeclinedError ||
+      err instanceof NonInteractiveError ||
+      err instanceof CorruptStateError
+    ) {
       // Error messages already displayed by promptMigration() or promptCorruptRecovery()
       process.exit(1);
       return; // Defensive: prevent fall-through if process.exit is mocked or behavior changes
@@ -233,4 +247,12 @@ export async function main(): Promise<void> {
   }
 }
 
-main();
+// Only run when executed directly, not when imported for testing
+const isDirectRun =
+  process.argv[1] &&
+  (import.meta.url === `file://${process.argv[1]}` ||
+    import.meta.url === new URL(process.argv[1], 'file://').href);
+
+if (isDirectRun) {
+  main();
+}

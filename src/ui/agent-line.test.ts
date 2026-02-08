@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import chalk from 'chalk';
 import { displayAgentActivity } from './agent-line.js';
 
@@ -152,6 +152,7 @@ describe('agent-line.ts - Agent Activity Line', () => {
       });
 
       // Strip ANSI codes to check actual text alignment
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escape codes requires matching control characters
       const stripAnsi = (str: string): string => str.replace(/\u001b\[\d+m/g, '');
 
       allLogs.forEach((log) => {

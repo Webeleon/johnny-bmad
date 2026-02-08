@@ -1,16 +1,16 @@
-import { describe, test, expect } from 'bun:test';
-import type { StoryCardData, CelebrationStats } from './index.js';
+import { describe, expect, test } from 'bun:test';
+import type { CelebrationStats, StoryCardData } from './index.js';
 import {
+  displayAgentActivity,
   displayBanner,
+  displayCelebration,
+  displayError,
   displayPhaseHeader,
   displayProgress,
-  displayAgentActivity,
+  displayResumeMessage,
   displayStatus,
   displayStoryCard,
   promptStoryApproval,
-  displayError,
-  displayCelebration,
-  displayResumeMessage,
 } from './index.js';
 
 describe('ui/index.ts - Barrel Exports', () => {
@@ -121,7 +121,9 @@ describe('ui/index.ts - Barrel Exports', () => {
     });
 
     test('should not throw when called with error details', () => {
-      expect(() => displayError('TestError', 'description', 'context', 'recovery command')).not.toThrow();
+      expect(() =>
+        displayError('TestError', 'description', 'context', 'recovery command')
+      ).not.toThrow();
     });
   });
 

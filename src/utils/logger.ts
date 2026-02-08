@@ -14,7 +14,7 @@ export function isVerbose(): boolean {
 
 export function log(level: LogLevel, message: string, ...args: unknown[]): void {
   const now = new Date().toISOString();
-  const timestamp = now.split('T')[0] + ' ' + now.split('T')[1].split('.')[0];
+  const timestamp = `${now.split('T')[0]} ${now.split('T')[1].split('.')[0]}`;
   const elapsed = getSessionElapsed();
   const prefix = chalk.gray(`[${timestamp}]`);
   const suffix = chalk.gray(`(${elapsed})`);
@@ -88,11 +88,7 @@ export function step(stepNum: number, total: number, message: string): void {
  * @param message - The message to log
  * @param agentDurationMs - Optional agent-specific duration in milliseconds
  */
-export function logWithTiming(
-  level: LogLevel,
-  message: string,
-  agentDurationMs?: number
-): void {
+export function logWithTiming(level: LogLevel, message: string, agentDurationMs?: number): void {
   const parts = [message];
 
   if (agentDurationMs !== undefined) {
@@ -118,10 +114,10 @@ export function successWithTiming(message: string, agentDurationMs?: number): vo
 
 // Agent role colors
 const AGENT_COLORS: Record<string, (text: string) => string> = {
-  'SM': chalk.cyan,
+  SM: chalk.cyan,
   'Story Creator': chalk.magenta,
-  'Dev': chalk.blue,
-  'Review': chalk.yellow,
+  Dev: chalk.blue,
+  Review: chalk.yellow,
 };
 
 /**
@@ -142,9 +138,7 @@ export function agentLifecycle(
       log('debug', `${roleTag} Starting agent...`);
       break;
     case 'complete': {
-      const duration = details?.durationMs
-        ? ` (${formatDuration(details.durationMs)})`
-        : '';
+      const duration = details?.durationMs ? ` (${formatDuration(details.durationMs)})` : '';
       log('debug', `${roleTag} Completed${duration}`);
       break;
     }

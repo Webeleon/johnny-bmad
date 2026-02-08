@@ -4,6 +4,11 @@ export interface CelebrationStats {
   duration: string;
 }
 
-export function displayCelebration(stats: CelebrationStats): void {}
+export function displayCelebration(_stats: CelebrationStats): void {}
 
-export function displayResumeMessage(epic: string, storyNum: number, totalStories: number, phase: string): void {}
+export function displayResumeMessage(
+  _epic: string,
+  _storyNum: number,
+  _totalStories: number,
+  _phase: string
+): void {}
