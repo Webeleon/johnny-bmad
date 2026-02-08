@@ -24,7 +24,7 @@ development_status:
   3-5-implement-agent-activity-line-component: done
   3-6-implement-status-message-component: done
   3-7-implement-story-review-card-component: done
-  3-8-implement-error-block-and-celebration-components: backlog
+  3-8-implement-error-block-and-celebration-components: in-progress
   epic-3-retrospective: optional
   epic-4: backlog
   4-1-implement-runbatchworkflow-function-shell: backlog
