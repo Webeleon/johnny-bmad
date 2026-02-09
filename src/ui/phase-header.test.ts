@@ -33,6 +33,10 @@ describe('phase-header.ts - Phase Header', () => {
 
   describe('displayPhaseHeader()', () => {
     test('should display phase header with Unicode separators', () => {
+      // Ensure clean environment for Unicode test
+      delete process.env.JOHNNY_BMAD_ASCII;
+      delete process.env.TERM;
+
       displayPhaseHeader('Story Creation');
       const output = consoleOutput.join('\n');
       expect(output).toContain('━━━');
@@ -52,6 +56,10 @@ describe('phase-header.ts - Phase Header', () => {
     });
 
     test('should use Unicode separator ━ by default', () => {
+      // Ensure clean environment for Unicode test
+      delete process.env.JOHNNY_BMAD_ASCII;
+      delete process.env.TERM;
+
       displayPhaseHeader('Story Creation');
       const output = consoleOutput.join('\n');
       expect(output).toContain('━');

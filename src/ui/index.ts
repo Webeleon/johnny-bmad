@@ -6,6 +6,6 @@ export { displayError } from './error.js';
 export { displayPhaseHeader } from './phase-header.js';
 export { displayProgress } from './progress.js';
 export { displayStatus } from './status.js';
-export type { StoryCardData } from './story-card.js';
+export type { ApprovalResult, NeedsChangesResult, StoryCardData } from './story-card.js';
 export { displayStoryCard, promptStoryApproval } from './story-card.js';
 export { isUnicodeSupported } from './unicode-support.js';

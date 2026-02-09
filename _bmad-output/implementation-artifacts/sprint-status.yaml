@@ -16,15 +16,15 @@ development_status:
   2-3-implement-workflow-mode-determination: done
   2-4-update-help-text-with-new-flags-and-examples: done
   epic-2-retrospective: optional
-  epic-3: in-progress
+  epic-3: done
   3-1-create-ui-component-directory-structure-and-index: done
   3-2-implement-ascii-banner-component: done
   3-3-implement-phase-header-component: done
   3-4-implement-progress-bar-component: done
-  3-5-implement-agent-activity-line-component: review
-  3-6-implement-status-message-component: backlog
-  3-7-implement-story-review-card-component: backlog
-  3-8-implement-error-block-and-celebration-components: backlog
+  3-5-implement-agent-activity-line-component: done
+  3-6-implement-status-message-component: done
+  3-7-implement-story-review-card-component: done
+  3-8-implement-error-block-and-celebration-components: done
   epic-3-retrospective: optional
   epic-4: backlog
   4-1-implement-runbatchworkflow-function-shell: backlog
