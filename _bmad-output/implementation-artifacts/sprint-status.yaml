@@ -26,10 +26,10 @@ development_status:
   3-7-implement-story-review-card-component: done
   3-8-implement-error-block-and-celebration-components: done
   epic-3-retrospective: optional
-  epic-4: backlog
-  4-1-implement-runbatchworkflow-function-shell: backlog
-  4-2-implement-batch-story-creation-loop: backlog
-  4-3-implement-per-story-review-flow: backlog
+  epic-4: in-progress
+  4-1-implement-runbatchworkflow-function-shell: done
+  4-2-implement-batch-story-creation-loop: done
+  4-3-implement-per-story-review-flow: in-progress
   4-4-implement-story-change-request-iteration: backlog
   4-5-implement-auto-approve-mode-for-batch: backlog
   4-6-implement-batch-completion-and-exit: backlog

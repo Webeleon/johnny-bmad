@@ -6,7 +6,12 @@ import { runStoryCreator } from './agents/story-creator.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { clearState, createInitialState, loadState, saveState } from './config.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
-import type { CliArgs, Epic, WorkflowMode } from './types.js';
+import type { CliArgs, Epic, State, WorkflowMode } from './types.js';
+import { displayAgentActivity } from './ui/agent-line.js';
+import { displayPhaseHeader } from './ui/phase-header.js';
+import { displayProgress } from './ui/progress.js';
+import { displayStatus } from './ui/status.js';
+import { displayStoryCard, promptStoryApproval } from './ui/story-card.js';
 import {
   ensureOutputDir,
   findOngoingWork,
@@ -41,7 +46,6 @@ import {
 /**
  * Determine workflow mode based on CLI arguments
  *
- * @internal Exported for testing only
  * @param args - Parsed CLI arguments
  * @returns Workflow mode (batch, dev-only, or sequential)
  */
@@ -51,6 +55,356 @@ export function determineMode(args: CliArgs): WorkflowMode {
   if (args.batch) return 'batch';
   if (args.devOnly) return 'dev-only';
   return 'sequential';
+}
+
+/**
+ * Run batch story creation loop
+ *
+ * Creates all story files for the epic before proceeding to review phase.
+ * Displays progress using UI components from Epic 3 and saves state before
+ * each Story Creator agent spawn for resume capability.
+ *
+ * **Resume Behavior:** On resume, starts from `state.workflow.currentStoryIndex`
+ * (0-based internally, displayed as 1-based to user). State is saved BEFORE each
+ * Story Creator spawn with the pre-creation index, enabling safe resume after
+ * failures.
+ *
+ * **Indexing Notes:**
+ * - Internal state uses 0-based indexing (0 = first story)
+ * - User display uses 1-based indexing (1 = first story)
+ * - When resuming, loop starts at `currentStoryIndex` and continues to end
+ * - After completion, `currentStoryIndex` is reset to 0 for review phase
+ *
+ * @param cwd - Current working directory
+ * @param state - Current workflow state (will be mutated and saved)
+ * @param args - Parsed CLI arguments (currently unused but kept for future extensibility,
+ *               e.g., Story 4-7 retry logic may need yolo mode or other flags)
+ *
+ * @internal
+ */
+export async function runBatchStoryCreationLoop(
+  cwd: string,
+  state: State,
+  _args: CliArgs
+): Promise<void> {
+  // Note: args parameter is currently unused but kept for future extensibility
+  // (e.g., Story 4-7 retry logic may need to access yolo mode or other flags)
+  // AC: 1 - Display phase header
+  displayPhaseHeader('Story Creation');
+
+  // Get all stories for the current epic from sprint-status.yaml
+  // This determines the total story count for the loop
+  const sprintStatus = await loadSprintStatus(cwd);
+  const epicStories = getAllStoriesForEpic(sprintStatus, state.currentEpic);
+
+  if (epicStories.length === 0) {
+    error(`No stories found for epic ${state.currentEpic}`);
+    error('Batch mode requires stories to exist in sprint-status.yaml before running.');
+    error('Run the planning phase first to create story files for this epic.');
+    error('Exiting batch workflow. No stories to create.');
+    // Transition to review phase even if no stories found
+    // (This allows the workflow to complete gracefully)
+    state.workflow.phase = 'review';
+    await saveState(cwd, state);
+    return;
+  }
+
+  // Get the starting index from state (resumes from 0 for fresh start)
+  const startIndex = state.workflow.currentStoryIndex;
+
+  // AC: 2 - Iterate from story 1 to N sequentially
+  // Note: Loop uses 1-based indexing for display, but state uses 0-based
+  for (let i = startIndex; i < epicStories.length; i++) {
+    const currentStoryNum = i + 1; // 1-based for display
+    const totalStories = epicStories.length;
+    const epicStory = epicStories[i];
+
+    // AC: 2 - Display progress with "creating..." status
+    displayProgress(currentStoryNum, totalStories, 'creating');
+
+    // AC: 3 - Display agent activity and save state BEFORE spawning
+    displayAgentActivity('Story', `Creating ${epicStory.id}...`);
+
+    // Save state BEFORE spawning the Story Creator agent (critical for resume capability)
+    // We save the pre-creation index (i) rather than post-creation (i+1) because:
+    // 1. If the agent crashes, we want to retry the SAME story, not skip to the next
+    // 2. The index only increments AFTER successful creation (line 142)
+    // 3. This ensures resume capability - on rerun, we'll retry the failed story
+    state.workflow.currentStoryIndex = i;
+    await saveState(cwd, state);
+
+    try {
+      // AC: 3 - Spawn Story Creator agent with appropriate prompt
+      // The runStoryCreator function handles the actual agent spawning
+      await runStoryCreator(cwd, epicStory, state.currentEpic);
+
+      // AC: 4 - Verify story file exists before marking as created
+      // This ensures the Story Creator actually created the file and didn't fail silently
+      const storyExists = await storyFileExists(cwd, epicStory.id);
+      if (!storyExists) {
+        error(`Story file not created for ${epicStory.id}`);
+        error('Story Creator may have failed silently or exited without creating the file.');
+        error('Check Story Creator agent logs for errors.');
+        error('Saving state and exiting. Run johnny-bmad again to resume.');
+        await saveState(cwd, state);
+        throw new Error(`Story file not created for ${epicStory.id}`);
+      }
+
+      // AC: 4 - Update progress display with "created" status after successful creation
+      displayProgress(currentStoryNum, totalStories, 'created');
+
+      // AC: 4 - Increment currentStoryIndex after successful story creation
+      state.workflow.currentStoryIndex = i + 1;
+    } catch (createError) {
+      const errorMessage = createError instanceof Error ? createError.message : String(createError);
+      error(`Story creator failed for ${epicStory.id}: ${errorMessage}`);
+      error('Saving state and exiting. Run johnny-bmad again to resume.');
+      await saveState(cwd, state);
+      throw createError; // Re-throw to halt execution
+    }
+
+    // Save state after each successful story creation
+    await saveState(cwd, state);
+  }
+
+  // AC: 5 - All stories created, transition to review phase
+  state.workflow.phase = 'review';
+  state.workflow.currentStoryIndex = 0; // Reset for review phase
+  await saveState(cwd, state);
+}
+
+/**
+ * Run batch story review loop
+ *
+ * Reviews each story created in the story creation phase, allowing the user to approve
+ * or request changes. Displays progress using UI components from Epic 3 and saves state
+ * after each approval for resume capability.
+ *
+ * **Implementation:** This function was implemented in Story 4-3 (implement-per-story-review-flow).
+ *
+ * **Phase Header Behavior:** The "Review" phase header is displayed ONLY when starting from
+ * the first story (currentStoryIndex === 0). On fresh starts, this is intuitive. On resume
+ * (e.g., after interruption), the header is NOT displayed again - we continue directly
+ * with the review loop from the current story index.
+ *
+ * **Resume Behavior:** On resume, starts from `state.workflow.currentStoryIndex`
+ * (0-based internally, displayed as 1-based to user). State is saved AFTER each
+ * approval with the post-approval index, enabling safe resume after interruptions.
+ *
+ * **Indexing Notes:**
+ * - Internal state uses 0-based indexing (0 = first story)
+ * - User display uses 1-based indexing (1 = first story)
+ * - When resuming, loop starts at `currentStoryIndex` and continues to end
+ * - After completion, workflow exits (no further phases in current batch implementation)
+ *
+ * @param cwd - Current working directory
+ * @param state - Current workflow state (will be mutated and saved)
+ * @param args - Parsed CLI arguments (currently unused but kept for future extensibility,
+ *               e.g., Story 4-5 auto-approve mode may need yolo mode or other flags)
+ *
+ * @internal
+ */
+export async function runBatchStoryReviewLoop(
+  cwd: string,
+  state: State,
+  _args: CliArgs
+): Promise<void> {
+  // Note: args parameter is currently unused but kept for future extensibility
+  // (e.g., Story 4-5 auto-approve mode may need to access yolo mode or other flags)
+
+  // AC: 1 - Display phase header (first story only - displayed once at start)
+  // Only display header if we're starting from the first story (currentStoryIndex === 0)
+  // This ensures the header is shown only on the initial run, not on resume
+  const isFirstStory = state.workflow.currentStoryIndex === 0;
+  if (isFirstStory) {
+    displayPhaseHeader('Review');
+  }
+
+  // Get all stories for the current epic from sprint-status.yaml
+  // This determines the total story count for the loop
+  const sprintStatus = await loadSprintStatus(cwd);
+  const epicStories = getAllStoriesForEpic(sprintStatus, state.currentEpic);
+
+  if (epicStories.length === 0) {
+    error(`No stories found for epic ${state.currentEpic}`);
+    error('Batch review requires stories to exist in sprint-status.yaml before running.');
+    error('Exiting batch workflow. No stories to review.');
+    // No phase transition - workflow will exit naturally
+    return;
+  }
+
+  // Get the starting index from state (resumes from 0 for fresh start)
+  const startIndex = state.workflow.currentStoryIndex;
+
+  // AC: 2 - Iterate from story 1 to N sequentially
+  // Note: Loop variable 'i' uses 0-based indexing (0 = first story)
+  // User display uses 1-based indexing (1 = first story), so we pass 'i' to UI functions
+  // which expect 0-based index internally and handle the conversion for display
+  for (let i = startIndex; i < epicStories.length; i++) {
+    const _currentStoryNum = i + 1; // 1-based for display/logging only
+    const totalStories = epicStories.length;
+    const epicStory = epicStories[i];
+
+    // Load the story file to extract metadata
+    const story = await loadStory(cwd, epicStory.id);
+    if (!story) {
+      error(`Story file not found for ${epicStory.id}`);
+      error('Skipping to next story. Check story file exists in implementation artifacts.');
+      // Save state before skipping to next story
+      state.workflow.currentStoryIndex = i + 1;
+      await saveState(cwd, state);
+      continue;
+    }
+
+    // Extract story metadata for display
+    // Count tasks from the story file (checkboxes with "- [ ]" prefix)
+    // Only count checkboxes within "## Tasks / Subtasks" section to avoid counting
+    // acceptance criteria or other sections that also use checkboxes
+    let taskCount = 0;
+    try {
+      const storyContent = await import('node:fs').then((fs) =>
+        fs.readFileSync(story.filePath, 'utf-8')
+      );
+      // Find the Tasks/Subtasks section and extract only that portion
+      const tasksSectionMatch = storyContent.match(/##\s+Tasks\s*\/\s*Subtasks([\s\S]*?)(?=##|$)/i);
+      if (tasksSectionMatch) {
+        const tasksSection = tasksSectionMatch[1];
+        const taskMatches = tasksSection.match(/^[\s]*-\s+\[[\s]\]/gm) || [];
+        taskCount = taskMatches.length;
+      }
+      // If no Tasks/Subtasks section found, taskCount remains 0
+      // (Don't count checkboxes from other sections like Review Follow-ups)
+    } catch {
+      // If file read fails, taskCount remains 0
+    }
+
+    // Count acceptance criteria from story object
+    const _acCount = story.acceptanceCriteria.length;
+
+    // Prepare story card data for UI display
+    const storyCardData = {
+      title: story.title,
+      epicId: state.currentEpic,
+      storyId: epicStory.id,
+      acceptanceCriteria: story.acceptanceCriteria.map((ac) => ac.text),
+      tasks: Array(taskCount).fill(''), // Placeholder array for count
+    };
+
+    // AC: 2 - Display story card with title, task count, and AC count
+    // Note: displayStoryCard expects 0-based index, so we pass 'i' not 'currentStoryNum'
+    displayStoryCard(storyCardData, i, totalStories);
+
+    // AC: 3 - Prompt for approval with [Y] Approve, [N] Request changes, [V] View full story
+    // Note: promptStoryApproval expects 0-based index, so we pass 'i' not 'currentStoryNum'
+    const approvalResult = await promptStoryApproval(
+      storyCardData,
+      i,
+      totalStories,
+      story.filePath
+    );
+
+    // Handle approval result
+    if (approvalResult === 'approved') {
+      // AC: 4 - Set state.stories.approvals[storyId] to 'approved'
+      state.stories.approvals[epicStory.id] = 'approved';
+
+      // AC: 4 - Display [OK] Story approved message
+      displayStatus('ok', 'Story approved');
+
+      // Save state after each approval (critical for resume capability)
+      state.workflow.currentStoryIndex = i + 1;
+      await saveState(cwd, state);
+    } else if (typeof approvalResult === 'object' && approvalResult.type === 'needs-changes') {
+      // Handle 'needs-changes' response - will be implemented in Story 4-4
+      // For now, display placeholder message and stop review loop
+      info(`Change requests for ${epicStory.id}: ${approvalResult.feedback}`);
+      info('Change request iteration will be implemented in Story 4-4');
+      info('Stopping review loop. Address the changes and run johnny-bmad again to continue.');
+
+      // Set approval status to 'needs-changes'
+      state.stories.approvals[epicStory.id] = 'needs-changes';
+
+      // Save state and break out of review loop (do NOT continue to next story)
+      // User must re-run johnny-bmad after addressing changes
+      await saveState(cwd, state);
+      break;
+    }
+  }
+
+  // AC: 6 - Check if all stories have 'approved' status
+  const allApproved = epicStories.every(
+    (epicStory) => state.stories.approvals[epicStory.id] === 'approved'
+  );
+
+  if (allApproved) {
+    // AC: 6 - All stories approved, transition to completion phase
+    // (Completion phase UI will be implemented in Story 4-6)
+    state.workflow.phase = 'completion';
+    await saveState(cwd, state);
+    info('All stories approved. Review phase complete.');
+    info('Completion phase will be implemented in Story 4-6.');
+    return;
+  }
+
+  // Some stories need changes - workflow will exit
+  const needsChangesCount = epicStories.filter(
+    (epicStory) => state.stories.approvals[epicStory.id] === 'needs-changes'
+  ).length;
+
+  info(`${needsChangesCount} story(s) need changes. Run johnny-bmad again to continue review.`);
+  info('Change request iteration will be implemented in Story 4-4.');
+}
+
+/**
+ * Run batch workflow for story creation and implementation
+ *
+ * This function handles the batch workflow mode, which creates all story files upfront
+ * before implementing them. It routes to different phases based on the current workflow phase.
+ *
+ * @param cwd - Current working directory
+ * @param state - Current workflow state
+ * @param args - Parsed CLI arguments
+ * @returns Promise that resolves when the batch workflow completes
+ *
+ * @internal
+ */
+export async function runBatchWorkflow(cwd: string, state: State, args: CliArgs): Promise<void> {
+  // AC: 4 - Initialize fresh start (phase defaults to story-creation)
+  // The state is already initialized with the correct phase before this function is called
+  // This is handled in runOrchestrator() when creating initial state
+
+  // AC: 2, 3 - Phase-based routing
+  switch (state.workflow.phase) {
+    case 'story-creation':
+      await runBatchStoryCreationLoop(cwd, state, args);
+      break;
+
+    case 'review':
+      await runBatchStoryReviewLoop(cwd, state, args);
+      break;
+
+    case 'implementation':
+      // Implementation phase exists for completeness and future extensibility.
+      // While batch mode currently focuses on story creation and review, the
+      // implementation phase may be used in future for scenarios such as:
+      // - Automated implementation with dev-only mode
+      // - Hybrid workflows combining batch creation with sequential implementation
+      // - Resume capability after manual intervention during implementation
+      info('Batch implementation phase - not yet implemented');
+      break;
+
+    default: {
+      // This should never happen if the State type is properly enforced
+      // However, if we reach here due to corrupted state or type mismatch,
+      // we need to fail fast rather than silently continuing
+      const unknownPhase = state.workflow.phase as string;
+      error(`Invalid workflow phase: "${unknownPhase}"`);
+      error('Valid phases are: story-creation, review, implementation');
+      error('This may indicate corrupted state or a version mismatch.');
+      error('Try: Clear state with --resume=false or delete .johnny-bmad-state.json');
+      process.exit(1);
+    }
+  }
 }
 
 export async function runOrchestrator(args: CliArgs): Promise<void> {
@@ -239,8 +593,8 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     const activeMode = state?.workflow.mode;
 
     if (activeMode === 'batch') {
-      warn('Batch workflow not yet implemented');
-      warn('        Try: Run without --batch flag for default sequential mode');
+      // AC: 5 - Call runBatchWorkflow instead of showing warning
+      await runBatchWorkflow(cwd, state!, args);
       return;
     } else if (activeMode === 'dev-only') {
       warn('Dev-only workflow not yet implemented');
