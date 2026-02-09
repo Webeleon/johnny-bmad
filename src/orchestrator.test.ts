@@ -2207,7 +2207,7 @@ describe('runBatchStoryReviewLoop()', () => {
       }
     });
 
-    test('should handle needs-changes response and break loop (do not continue to next story)', async () => {
+    test('should handle needs-changes response and invoke story updater (Story 4-4 behavior)', async () => {
       const mockState: State = {
         currentEpic: 'epic-4',
         lastUpdated: new Date().toISOString(),
@@ -2229,12 +2229,10 @@ describe('runBatchStoryReviewLoop()', () => {
       const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
         development_status: {
           '4-1-test': 'ready-for-dev',
-          '4-2-test': 'ready-for-dev',
         },
       });
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '4-1-test', status: 'ready-for-dev' },
-        { id: '4-2-test', status: 'ready-for-dev' },
       ]);
       const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
         id: '4-1-test',
@@ -2247,41 +2245,41 @@ describe('runBatchStoryReviewLoop()', () => {
       );
       const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
 
-      // Return needs-changes with feedback
-      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue({
-        type: 'needs-changes',
-        feedback: 'Add more tests',
-      });
+      // Return needs-changes with feedback, then approve on second prompt
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Add more tests' })
+        .mockResolvedValueOnce('approved');
 
       const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
       const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
 
+      // Mock spawnClaude for Story Creator re-invocation (Story 4-4)
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockResolvedValue({
+        durationMs: 1000,
+      });
+
       try {
         await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
 
-        // Verify state was updated with needs-changes status
-        expect(mockState.stories.approvals['4-1-test']).toBe('needs-changes');
+        // Verify state was updated with approved status (after revision cycle)
+        expect(mockState.stories.approvals['4-1-test']).toBe('approved');
 
-        // Verify second story was NOT reviewed (break behavior)
-        expect(mockState.stories.approvals['4-2-test']).toBeUndefined();
+        // Verify story updater was invoked (Story 4-4 behavior)
+        expect(spawnClaudeSpy).toHaveBeenCalledWith({
+          model: 'opus',
+          prompt: expect.stringContaining('Add more tests'),
+          cwd: mockCwd,
+          allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
+          agentRole: 'Story Creator',
+        });
 
-        // Verify loadStory was called only once (first story only)
-        expect(loadStorySpy).toHaveBeenCalledTimes(1);
-
-        // Verify displayStoryCard was called only once (first story only)
-        expect(displayStoryCardSpy).toHaveBeenCalledTimes(1);
-
-        // Verify promptStoryApproval was called only once (first story only)
-        expect(promptStoryApprovalSpy).toHaveBeenCalledTimes(1);
-
-        // Verify info messages were displayed about stopping review loop
+        // Verify info messages were displayed about change requests
         expect(infoSpy).toHaveBeenCalledWith(
           expect.stringContaining('Change requests for 4-1-test')
         );
-        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Stopping review loop'));
-        expect(infoSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Change request iteration will be implemented in Story 4-4')
-        );
+
+        // Verify the story was displayed twice (initial + revised)
+        expect(displayStoryCardSpy).toHaveBeenCalledTimes(2);
       } finally {
         displayPhaseHeaderSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
@@ -2292,6 +2290,7 @@ describe('runBatchStoryReviewLoop()', () => {
         promptStoryApprovalSpy.mockRestore();
         saveStateSpy.mockRestore();
         infoSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
       }
     });
   });
@@ -2504,7 +2503,7 @@ describe('runBatchStoryReviewLoop()', () => {
       }
     });
 
-    test('should continue workflow when some stories need changes', async () => {
+    test('should handle error when story updater fails (Story 4-4 behavior)', async () => {
       const mockState: State = {
         currentEpic: 'epic-4',
         lastUpdated: new Date().toISOString(),
@@ -2525,16 +2524,14 @@ describe('runBatchStoryReviewLoop()', () => {
       );
       const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
         development_status: {
-          '4-1-test': 'ready-for-dev',
           '4-2-test': 'ready-for-dev',
         },
       });
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
-        { id: '4-1-test', status: 'ready-for-dev' },
         { id: '4-2-test', status: 'ready-for-dev' },
       ]);
       const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
-        id: '4-1-test',
+        id: '4-2-test',
         title: 'Test Story',
         filePath: '/test/story.md',
         acceptanceCriteria: [{ text: 'AC 1', done: false }],
@@ -2544,27 +2541,55 @@ describe('runBatchStoryReviewLoop()', () => {
       );
       const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
 
-      // First story approved, second needs changes
+      // Story needs changes, then approve after fix
       const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
-        .mockResolvedValueOnce('approved')
-        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Fix this' });
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Fix this' })
+        .mockResolvedValueOnce('approved');
 
       const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
       const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
       const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Mock spawnClaude to throw an error (simulating failure)
+      // With retry logic, this will be called 3 times before giving up
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockRejectedValue(
+        new Error('ENOENT: no such file or directory, posix_spawn')
+      );
+
+      // Mock setTimeout to avoid delays in tests (instant retry)
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown) => {
+          fn(); // Execute immediately without delay
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
 
       try {
         await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
 
-        // Verify mixed approval states
-        expect(mockState.stories.approvals['4-1-test']).toBe('approved');
-        expect(mockState.stories.approvals['4-2-test']).toBe('needs-changes');
-
-        // Verify message about continuing workflow
-        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('1 story(s) need changes'));
-        expect(infoSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Run johnny-bmad again to continue review')
+        // Verify retry warnings were logged (attempts 1 and 2)
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Story updater attempt 1/3 failed')
         );
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Story updater attempt 2/3 failed')
+        );
+
+        // Verify final error was logged (after 3 attempts)
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to update story 4-2-test after 3 attempts')
+        );
+
+        // Verify recovery guidance was provided
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Try:'));
+
+        // Verify state was saved despite error
+        expect(saveStateSpy).toHaveBeenCalled();
+
+        // Verify spawnClaude was called 3 times (retry logic)
+        expect(spawnClaudeSpy).toHaveBeenCalledTimes(3);
       } finally {
         displayPhaseHeaderSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
@@ -2576,6 +2601,10 @@ describe('runBatchStoryReviewLoop()', () => {
         saveStateSpy.mockRestore();
         displayStatusSpy.mockRestore();
         infoSpy.mockRestore();
+        errorSpy.mockRestore();
+        warnSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
+        mockSetTimeout.mockRestore();
       }
     });
   });
@@ -2847,6 +2876,962 @@ describe('runBatchStoryReviewLoop()', () => {
         promptStoryApprovalSpy.mockRestore();
         saveStateSpy.mockRestore();
         displayStatusSpy.mockRestore();
+      }
+    });
+  });
+});
+
+// Tests for Story 4-4: Story Change Request Iteration
+describe('orchestrator.ts - Story 4-4: Change Request Iteration', () => {
+  describe('runBatchStoryReviewLoop() - change request iteration', () => {
+    test('should capture feedback when user requests changes and re-invoke Story Creator', async () => {
+      const mockCwd = '/test/project';
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-4-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-4-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-4-test-story',
+        title: 'Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const userFeedback = 'Add more error handling';
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: userFeedback })
+        .mockResolvedValueOnce('approved'); // Second call approves after revision
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      // Mock spawnClaude for Story Creator re-invocation
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockResolvedValue({
+        durationMs: 1000,
+      });
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify feedback was captured
+        expect(promptStoryApprovalSpy).toHaveBeenCalledTimes(2); // First request, then after revision
+
+        // Verify state was set to needs-changes
+        expect(mockState.stories.approvals['4-4-test-story']).toBe('approved'); // Final state after approval
+
+        // Verify Story Creator was re-invoked with feedback
+        expect(spawnClaudeSpy).toHaveBeenCalledWith({
+          model: 'opus',
+          prompt: expect.stringContaining(userFeedback),
+          cwd: mockCwd,
+          allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
+          agentRole: 'Story Creator',
+        });
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
+      }
+    });
+
+    test('should display revised indicator on story card after revision', async () => {
+      const mockCwd = '/test/project';
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-4-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-4-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-4-test-story',
+        title: 'Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Fix typos' })
+        .mockResolvedValueOnce('approved');
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockResolvedValue({
+        durationMs: 1000,
+      });
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify displayStoryCard was called with isRevised=true on second call
+        expect(displayStoryCardSpy).toHaveBeenCalled();
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
+      }
+    });
+
+    test('should handle multiple revision cycles until approval', async () => {
+      const mockCwd = '/test/project';
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-4-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-4-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-4-test-story',
+        title: 'Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+
+      // Simulate 3 revision cycles before approval
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'First change request' })
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Second change request' })
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Third change request' })
+        .mockResolvedValueOnce('approved');
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockResolvedValue({
+        durationMs: 1000,
+      });
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify prompt was called 4 times (3 revisions + 1 approval)
+        expect(promptStoryApprovalSpy).toHaveBeenCalledTimes(4);
+
+        // Verify Story Creator was invoked 3 times for revisions
+        expect(spawnClaudeSpy).toHaveBeenCalledTimes(3);
+
+        // Verify final state is approved
+        expect(mockState.stories.approvals['4-4-test-story']).toBe('approved');
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
+      }
+    });
+
+    test('should save state before and after Story Creator re-invocation', async () => {
+      const mockCwd = '/test/project';
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-4-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-4-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-4-test-story',
+        title: 'Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval')
+        .mockResolvedValueOnce({ type: 'needs-changes', feedback: 'Add tests' })
+        .mockResolvedValueOnce('approved');
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const spawnClaudeSpy = spyOn(claudeCli, 'spawnClaude').mockResolvedValue({
+        durationMs: 1000,
+      });
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify saveState was called at least twice:
+        // 1. After setting needs-changes status
+        // 2. After final approval
+        // 3. After phase transition (all approved)
+        expect(saveStateSpy).toHaveBeenCalledTimes(3);
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+        spawnClaudeSpy.mockRestore();
+      }
+    });
+  });
+});
+
+// Tests for Story 4-5: Auto-Approve Mode for Batch
+describe('orchestrator.ts - Story 4-5: Auto-Approve Mode', () => {
+  describe('runBatchStoryReviewLoop() - auto-approve mode', () => {
+    const mockCwd = '/test/project';
+
+    test('should skip approval prompt when yolo flag is true', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: true, // Yolo mode enabled
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-5-test-story',
+        title: 'Auto-Approve Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify prompt was NOT called (auto-approve bypasses it)
+        expect(promptStoryApprovalSpy).not.toHaveBeenCalled();
+
+        // Verify state was set to approved directly
+        expect(mockState.stories.approvals['4-5-test-story']).toBe('approved');
+
+        // Verify auto-approve message was displayed
+        expect(displayStatusSpy).toHaveBeenCalledWith('ok', 'Story auto-approved (--yolo)');
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should display approval prompt when yolo flag is false', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false, // Yolo mode disabled
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-5-test-story',
+        title: 'Normal Approval Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify prompt WAS called (normal approval flow)
+        expect(promptStoryApprovalSpy).toHaveBeenCalled();
+
+        // Verify state was set to approved
+        expect(mockState.stories.approvals['4-5-test-story']).toBe('approved');
+
+        // Verify normal approval message was displayed (not auto-approve)
+        expect(displayStatusSpy).toHaveBeenCalledWith('ok', 'Story approved');
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should auto-approve all stories in yolo mode', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: true,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-story-1': 'ready-for-dev',
+          '4-5-story-2': 'ready-for-dev',
+          '4-5-story-3': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-story-1', status: 'ready-for-dev' },
+        { id: '4-5-story-2', status: 'ready-for-dev' },
+        { id: '4-5-story-3', status: 'ready-for-dev' },
+      ]);
+
+      // Mock loading each story
+      const loadStorySpy = spyOn(files, 'loadStory')
+        .mockResolvedValueOnce({
+          id: '4-5-story-1',
+          title: 'Story 1',
+          filePath: '/test/story1.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        })
+        .mockResolvedValueOnce({
+          id: '4-5-story-2',
+          title: 'Story 2',
+          filePath: '/test/story2.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        })
+        .mockResolvedValueOnce({
+          id: '4-5-story-3',
+          title: 'Story 3',
+          filePath: '/test/story3.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        });
+
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify all stories were auto-approved
+        expect(mockState.stories.approvals['4-5-story-1']).toBe('approved');
+        expect(mockState.stories.approvals['4-5-story-2']).toBe('approved');
+        expect(mockState.stories.approvals['4-5-story-3']).toBe('approved');
+
+        // Verify prompt was never called (all auto-approved)
+        expect(promptStoryApprovalSpy).not.toHaveBeenCalled();
+
+        // Verify auto-approve message was displayed for each story
+        expect(displayStatusSpy).toHaveBeenCalledTimes(4); // 3 stories + 1 completion summary
+
+        // Verify completion summary message
+        expect(displayStatusSpy).toHaveBeenCalledWith(
+          'ok',
+          'All 3 stories created and approved (--yolo mode)'
+        );
+
+        // Verify phase transition to completion
+        expect(mockState.workflow.phase).toBe('completion');
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should save state after each auto-approval for resume capability', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: true,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-story-1': 'ready-for-dev',
+          '4-5-story-2': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-story-1', status: 'ready-for-dev' },
+        { id: '4-5-story-2', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory')
+        .mockResolvedValueOnce({
+          id: '4-5-story-1',
+          title: 'Story 1',
+          filePath: '/test/story1.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        })
+        .mockResolvedValueOnce({
+          id: '4-5-story-2',
+          title: 'Story 2',
+          filePath: '/test/story2.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify saveState was called for each auto-approval plus phase transition
+        // 2 stories + 1 phase transition = 3 calls
+        expect(saveStateSpy).toHaveBeenCalledTimes(3);
+
+        // Verify state progression through auto-approvals
+        expect(mockState.workflow.currentStoryIndex).toBe(2); // After both stories
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should resume from partial auto-approval state correctly', async () => {
+      // Simulate resume: first story already approved, second story needs auto-approval
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 1, // Resume from second story
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {
+            '4-5-story-1': 'approved', // First story already approved
+          },
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: true,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-story-1': 'ready-for-dev',
+          '4-5-story-2': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-story-1', status: 'ready-for-dev' },
+        { id: '4-5-story-2', status: 'ready-for-dev' },
+      ]);
+
+      // Only load second story (first is already approved)
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-5-story-2',
+        title: 'Story 2',
+        filePath: '/test/story2.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify only second story was processed
+        expect(loadStorySpy).toHaveBeenCalledTimes(1);
+        expect(loadStorySpy).toHaveBeenCalledWith('/test/project', '4-5-story-2');
+
+        // Verify second story was auto-approved
+        expect(mockState.stories.approvals['4-5-story-2']).toBe('approved');
+
+        // Verify first story approval was preserved
+        expect(mockState.stories.approvals['4-5-story-1']).toBe('approved');
+
+        // Verify prompt was not called (auto-approve mode)
+        expect(promptStoryApprovalSpy).not.toHaveBeenCalled();
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should display normal completion summary when not in yolo mode', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: false, // Not in yolo mode
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-test-story': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-test-story', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '4-5-test-story',
+        title: 'Test Story',
+        filePath: '/test/test-story.md',
+        acceptanceCriteria: [{ text: 'AC 1', done: false }],
+      });
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify normal completion messages (not auto-approve summary)
+        expect(infoSpy).toHaveBeenCalledWith('All stories approved. Review phase complete.');
+
+        // Verify auto-approve completion summary was NOT displayed
+        expect(displayStatusSpy).not.toHaveBeenCalledWith(
+          'ok',
+          expect.stringContaining('All 1 stories created and approved (--yolo mode)')
+        );
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+      }
+    });
+
+    test('should handle missing story files in yolo mode gracefully', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-4',
+        lastUpdated: '2026-02-09T00:00:00.000Z',
+        workflow: {
+          mode: 'batch',
+          phase: 'review',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+      const mockArgs: CliArgs = {
+        resume: false,
+        help: false,
+        verbose: false,
+        yolo: true,
+        batch: true,
+        devOnly: false,
+      };
+
+      // Mock dependencies
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '4-5-story-1': 'ready-for-dev',
+          '4-5-story-2': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '4-5-story-1', status: 'ready-for-dev' },
+        { id: '4-5-story-2', status: 'ready-for-dev' },
+      ]);
+
+      // First story not found, second story found
+      const loadStorySpy = spyOn(files, 'loadStory')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: '4-5-story-2',
+          title: 'Story 2',
+          filePath: '/test/story2.md',
+          acceptanceCriteria: [{ text: 'AC 1', done: false }],
+        });
+
+      const mockReadFileSync = spyOn(await import('node:fs'), 'readFileSync').mockReturnValue(
+        '- [ ] Task 1\n'
+      );
+      const displayStoryCardSpy = spyOn(storyCard, 'displayStoryCard').mockImplementation(() => {});
+      const promptStoryApprovalSpy = spyOn(storyCard, 'promptStoryApproval').mockResolvedValue(
+        'approved'
+      );
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+
+      try {
+        await runBatchStoryReviewLoop(mockCwd, mockState, mockArgs);
+
+        // Verify error was logged for missing story
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Story file not found for 4-5-story-1')
+        );
+
+        // Verify second story was still auto-approved
+        expect(mockState.stories.approvals['4-5-story-2']).toBe('approved');
+
+        // Verify prompt was never called (yolo mode)
+        expect(promptStoryApprovalSpy).not.toHaveBeenCalled();
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        mockReadFileSync.mockRestore();
+        displayStoryCardSpy.mockRestore();
+        promptStoryApprovalSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        infoSpy.mockRestore();
+        errorSpy.mockRestore();
       }
     });
   });

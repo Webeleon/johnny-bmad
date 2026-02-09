@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { runDevAgent } from './agents/dev.js';
 import { runReviewAgent } from './agents/reviewer.js';
 import { runSmAgent } from './agents/sm.js';
-import { runStoryCreator } from './agents/story-creator.js';
+import { runStoryCreator, runStoryUpdater } from './agents/story-creator.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { clearState, createInitialState, loadState, saveState } from './config.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
@@ -181,6 +181,7 @@ export async function runBatchStoryCreationLoop(
  * after each approval for resume capability.
  *
  * **Implementation:** This function was implemented in Story 4-3 (implement-per-story-review-flow).
+ * **Auto-Approve:** Story 4-5 adds auto-approve mode when args.yolo is true.
  *
  * **Phase Header Behavior:** The "Review" phase header is displayed ONLY when starting from
  * the first story (currentStoryIndex === 0). On fresh starts, this is intuitive. On resume
@@ -191,6 +192,10 @@ export async function runBatchStoryCreationLoop(
  * (0-based internally, displayed as 1-based to user). State is saved AFTER each
  * approval with the post-approval index, enabling safe resume after interruptions.
  *
+ * **Auto-Approve Mode (Story 4-5):** When args.yolo is true, stories are automatically
+ * approved without prompting the user. The approval prompt is skipped, and the story
+ * is marked as 'approved' directly with a clear message indicating auto-approval.
+ *
  * **Indexing Notes:**
  * - Internal state uses 0-based indexing (0 = first story)
  * - User display uses 1-based indexing (1 = first story)
@@ -199,19 +204,15 @@ export async function runBatchStoryCreationLoop(
  *
  * @param cwd - Current working directory
  * @param state - Current workflow state (will be mutated and saved)
- * @param args - Parsed CLI arguments (currently unused but kept for future extensibility,
- *               e.g., Story 4-5 auto-approve mode may need yolo mode or other flags)
+ * @param args - Parsed CLI arguments (yolo flag enables auto-approve mode)
  *
  * @internal
  */
 export async function runBatchStoryReviewLoop(
   cwd: string,
   state: State,
-  _args: CliArgs
+  args: CliArgs
 ): Promise<void> {
-  // Note: args parameter is currently unused but kept for future extensibility
-  // (e.g., Story 4-5 auto-approve mode may need to access yolo mode or other flags)
-
   // AC: 1 - Display phase header (first story only - displayed once at start)
   // Only display header if we're starting from the first story (currentStoryIndex === 0)
   // This ensures the header is shown only on the initial run, not on resume
@@ -294,16 +295,114 @@ export async function runBatchStoryReviewLoop(
     // Note: displayStoryCard expects 0-based index, so we pass 'i' not 'currentStoryNum'
     displayStoryCard(storyCardData, i, totalStories);
 
+    // Story 4-5: Auto-approve mode - skip approval prompt when yolo is true
+    let approvalResult: 'approved' | { type: 'needs-changes'; feedback: string };
+    if (args.yolo) {
+      // Auto-approve: set approval directly without prompting
+      approvalResult = 'approved';
+      state.stories.approvals[epicStory.id] = 'approved';
+      displayStatus('ok', 'Story auto-approved (--yolo)');
+      // Save state after auto-approval for resume capability
+      state.workflow.currentStoryIndex = i + 1;
+      await saveState(cwd, state);
+      // Skip the rest of the loop iteration (revision loop and manual approval handling)
+      continue;
+    }
+
     // AC: 3 - Prompt for approval with [Y] Approve, [N] Request changes, [V] View full story
     // Note: promptStoryApproval expects 0-based index, so we pass 'i' not 'currentStoryNum'
-    const approvalResult = await promptStoryApproval(
-      storyCardData,
-      i,
-      totalStories,
-      story.filePath
-    );
+    approvalResult = await promptStoryApproval(storyCardData, i, totalStories, story.filePath);
 
-    // Handle approval result
+    // Story 4-4: Revision iteration loop - continues until user approves
+    let _isRevised = false; // Track if this story has been revised
+
+    while (approvalResult !== 'approved') {
+      // Handle 'needs-changes' response (Story 4-4: Change Request Iteration)
+      if (typeof approvalResult === 'object' && approvalResult.type === 'needs-changes') {
+        const userFeedback = approvalResult.feedback;
+
+        // AC: 1, 2 - Capture feedback and set status
+        info(`Change requests for ${epicStory.id}: ${userFeedback}`);
+        state.stories.approvals[epicStory.id] = 'needs-changes';
+
+        // Save state before Story Creator re-invocation (critical for resume capability)
+        await saveState(cwd, state);
+
+        // AC: 3 - Re-invoke Story Creator agent with feedback
+        // Use retry logic (3 attempts, exponential backoff) for resilience
+        let _updateSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await runStoryUpdater(cwd, epicStory.id, story.filePath, userFeedback);
+            _updateSuccess = true;
+            break;
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            if (attempt < 3) {
+              warn(`Story updater attempt ${attempt}/3 failed: ${errorMessage}`);
+              const backoffMs = 2 ** attempt * 1000; // Exponential backoff: 2s, 4s
+              info(`Retrying in ${backoffMs / 1000}s...`);
+              await new Promise((resolve) => setTimeout(resolve, backoffMs));
+            } else {
+              error(`Failed to update story ${epicStory.id} after 3 attempts: ${errorMessage}`);
+              error('Try: Address the changes manually or run johnny-bmad again to retry.');
+              // Save error state and exit
+              await saveState(cwd, state);
+              return;
+            }
+          }
+        }
+
+        // Mark as revised for next display
+        _isRevised = true;
+
+        // Reload story to get updated content
+        const updatedStory = await loadStory(cwd, epicStory.id);
+        if (!updatedStory) {
+          error(`Failed to reload story ${epicStory.id} after update`);
+          // Continue with original story data
+        } else {
+          // Update story card data with revised content
+          storyCardData.title = updatedStory.title;
+          storyCardData.acceptanceCriteria = updatedStory.acceptanceCriteria.map((ac) => ac.text);
+
+          // Recount tasks from updated story
+          let updatedTaskCount = 0;
+          try {
+            const updatedStoryContent = await import('node:fs').then((fs) =>
+              fs.readFileSync(updatedStory.filePath, 'utf-8')
+            );
+            const tasksSectionMatch = updatedStoryContent.match(
+              /##\s+Tasks\s*\/\s*Subtasks([\s\S]*?)(?=##|$)/i
+            );
+            if (tasksSectionMatch) {
+              const tasksSection = tasksSectionMatch[1];
+              const taskMatches = tasksSection.match(/^[\s]*-\s+\[[\s]\]/gm) || [];
+              updatedTaskCount = taskMatches.length;
+            }
+          } catch {
+            // If file read fails, keep previous task count
+          }
+          storyCardData.tasks = Array(updatedTaskCount).fill('');
+        }
+
+        // AC: 4 - Re-display story card with (revised) indicator
+        displayStoryCard(storyCardData, i, totalStories, true);
+
+        // AC: 4 - Re-run approval prompt after story update
+        approvalResult = await promptStoryApproval(storyCardData, i, totalStories, story.filePath);
+
+        // AC: 5 - Continue iteration until user approves (no cycle limit)
+        // Loop continues while approvalResult !== 'approved'
+        continue;
+      }
+
+      // If we get here, something unexpected happened - break to avoid infinite loop
+      error(`Unexpected approval result: ${approvalResult}`);
+      break;
+    }
+
+    // Handle approved result (after potential revisions)
     if (approvalResult === 'approved') {
       // AC: 4 - Set state.stories.approvals[storyId] to 'approved'
       state.stories.approvals[epicStory.id] = 'approved';
@@ -314,20 +413,6 @@ export async function runBatchStoryReviewLoop(
       // Save state after each approval (critical for resume capability)
       state.workflow.currentStoryIndex = i + 1;
       await saveState(cwd, state);
-    } else if (typeof approvalResult === 'object' && approvalResult.type === 'needs-changes') {
-      // Handle 'needs-changes' response - will be implemented in Story 4-4
-      // For now, display placeholder message and stop review loop
-      info(`Change requests for ${epicStory.id}: ${approvalResult.feedback}`);
-      info('Change request iteration will be implemented in Story 4-4');
-      info('Stopping review loop. Address the changes and run johnny-bmad again to continue.');
-
-      // Set approval status to 'needs-changes'
-      state.stories.approvals[epicStory.id] = 'needs-changes';
-
-      // Save state and break out of review loop (do NOT continue to next story)
-      // User must re-run johnny-bmad after addressing changes
-      await saveState(cwd, state);
-      break;
     }
   }
 
@@ -341,7 +426,14 @@ export async function runBatchStoryReviewLoop(
     // (Completion phase UI will be implemented in Story 4-6)
     state.workflow.phase = 'completion';
     await saveState(cwd, state);
-    info('All stories approved. Review phase complete.');
+
+    // Story 4-5: Display auto-approve completion summary when yolo mode is active
+    if (args.yolo) {
+      displayStatus('ok', `All ${epicStories.length} stories created and approved (--yolo mode)`);
+      info('All stories approved. Review phase complete.');
+    } else {
+      info('All stories approved. Review phase complete.');
+    }
     info('Completion phase will be implemented in Story 4-6.');
     return;
   }
@@ -351,8 +443,9 @@ export async function runBatchStoryReviewLoop(
     (epicStory) => state.stories.approvals[epicStory.id] === 'needs-changes'
   ).length;
 
-  info(`${needsChangesCount} story(s) need changes. Run johnny-bmad again to continue review.`);
-  info('Change request iteration will be implemented in Story 4-4.');
+  if (needsChangesCount > 0) {
+    info(`${needsChangesCount} story(s) need changes. Run johnny-bmad again to continue review.`);
+  }
 }
 
 /**
