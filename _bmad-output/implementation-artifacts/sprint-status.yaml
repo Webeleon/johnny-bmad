@@ -30,8 +30,8 @@ development_status:
   4-1-implement-runbatchworkflow-function-shell: done
   4-2-implement-batch-story-creation-loop: done
   4-3-implement-per-story-review-flow: done
-  4-4-implement-story-change-request-iteration: backlog
-  4-5-implement-auto-approve-mode-for-batch: backlog
+  4-4-implement-story-change-request-iteration: done
+  4-5-implement-auto-approve-mode-for-batch: review
   4-6-implement-batch-completion-and-exit: backlog
   4-7-implement-retry-logic-for-story-creator: backlog
   epic-4-retrospective: optional
