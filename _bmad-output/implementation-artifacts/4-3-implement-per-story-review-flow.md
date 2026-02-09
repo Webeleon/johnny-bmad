@@ -1,6 +1,6 @@
 # Story 4.3: implement-per-story-review-flow
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -111,6 +111,10 @@ So that I can approve or request changes before moving to the next.
 3. **AC#6 completion phase transition**: Fixed by adding `state.workflow.phase = 'completion'` and saving state when all stories are approved.
 4. **Test for 'view' response**: Test coverage already exists in `src/ui/story-card.test.ts:286-394` - multiple tests cover the view functionality including file reading and fallback behavior.
 5. **Add missing files to File List**: Added 4-1 and 4-2 story files to Dev Agent Record File List below.
+
+## New Review Follow-ups (AI) - 2026-02-09 Round 4
+
+- [ ] [AI-Review][LOW] Fix import statement semicolon inconsistency - src/ui/story-card.ts:3 has a trailing semicolon while the rest of the file doesn't use semicolons (minor style inconsistency)
 
 ## Dev Notes
 
