@@ -11,7 +11,7 @@ import chalk from 'chalk';
  * Respects NO_COLOR environment variable (chalk auto-handles this).
  * @param errorType - Type of error (e.g., "API Error", "Validation Error")
  * @param description - Brief description of the error
- * @param context - Context where error occurred (e.g., "Story 4/8")
+ * @param context - Context where error occurred. For story progress, include "Story " prefix (e.g., "Story 4/8")
  * @param recoveryCmd - Actionable recovery command or instruction
  */
 export function displayError(
