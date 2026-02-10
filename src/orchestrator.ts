@@ -44,6 +44,26 @@ import {
 } from './utils/user-input.js';
 
 /**
+ * Retry configuration for agent spawning (Story 4-7)
+ *
+ * These constants control the retry behavior for Story Creator and Story Updater
+ * agents when they encounter transient failures (network errors, API rate limits, etc.)
+ *
+ * **TECHNICAL DEBT NOTE (Story 4-7, Story 4-4)**: The retry logic is duplicated between
+ * runBatchStoryCreationLoop() (lines 147-247) and runBatchStoryReviewLoop() (lines 661-729).
+ * This violates DRY principle and ARCH-6 which calls for a reusable retryableOperation() function.
+ *
+ * **DEFERRED TO EPIC 5**: Refactoring to a shared utility is deferred to Epic 5 (Dev-Only Execution)
+ * where Dev and Reviewer agents will also need retry logic. At that point, a comprehensive
+ * retry utility can be implemented once and reused across all agent types.
+ *
+ * **RELATED STORIES**: 4-4 (initial Story Updater retry), 4-7 (comprehensive retry with rate limiting)
+ */
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 4000, 8000] as const; // Exponential backoff in milliseconds
+const RATE_LIMIT_COOLDOWN = 60000; // 60 seconds for rate limit cooldown
+
+/**
  * Determine workflow mode based on CLI arguments
  *
  * @param args - Parsed CLI arguments
@@ -125,42 +145,138 @@ export async function runBatchStoryCreationLoop(
     // AC: 3 - Display agent activity and save state BEFORE spawning
     displayAgentActivity('Story', `Creating ${epicStory.id}...`);
 
-    // Save state BEFORE spawning the Story Creator agent (critical for resume capability)
-    // We save the pre-creation index (i) rather than post-creation (i+1) because:
-    // 1. If the agent crashes, we want to retry the SAME story, not skip to the next
-    // 2. The index only increments AFTER successful creation (line 142)
-    // 3. This ensures resume capability - on rerun, we'll retry the failed story
+    // AC: 4 - Save state BEFORE spawning the Story Creator agent (critical for resume capability)
+    //
+    // **AC 4 REQUIREMENT**: "BEFORE any Story Creator spawn"
+    //
+    // **IMPLEMENTATION NOTE**: State is saved once before the retry loop begins (not before each retry attempt).
+    // This implementation satisfies AC 4 because:
+    // 1. State is preserved before the first spawn attempt
+    // 2. On resume, the retry loop will re-execute from the same story index
+    // 3. The pre-creation index (i) ensures retrying the same story, not skipping
+    //
+    // **RATIONALE FOR SINGLE SAVE**: Saving before each retry would be redundant since:
+    // - The story index hasn't changed (we're retrying the same story)
+    // - No progress has been made to preserve
+    // - The initial save already enables resume capability
     state.workflow.currentStoryIndex = i;
     await saveState(cwd, state);
 
-    try {
-      // AC: 3 - Spawn Story Creator agent with appropriate prompt
-      // The runStoryCreator function handles the actual agent spawning
-      await runStoryCreator(cwd, epicStory, state.currentEpic);
+    // Story 4-7: Retry logic for Story Creator agent spawn
+    // Implements exponential backoff: 2s, 4s, 8s delays
+    // Max 3 retries before giving up
+    // Each retry attempt reuses the same saved state (current story index preserved)
+    let createSuccess = false;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // AC: 3 - Spawn Story Creator agent with appropriate prompt
+        // The runStoryCreator function handles the actual agent spawning
+        await runStoryCreator(cwd, epicStory, state.currentEpic);
 
-      // AC: 4 - Verify story file exists before marking as created
-      // This ensures the Story Creator actually created the file and didn't fail silently
-      const storyExists = await storyFileExists(cwd, epicStory.id);
-      if (!storyExists) {
-        error(`Story file not created for ${epicStory.id}`);
-        error('Story Creator may have failed silently or exited without creating the file.');
-        error('Check Story Creator agent logs for errors.');
-        error('Saving state and exiting. Run johnny-bmad again to resume.');
-        await saveState(cwd, state);
-        throw new Error(`Story file not created for ${epicStory.id}`);
+        // AC: 4 - Verify story file exists before marking as created
+        // This ensures the Story Creator actually created the file and didn't fail silently
+        const storyExists = await storyFileExists(cwd, epicStory.id);
+        if (!storyExists) {
+          error(`Story file not created for ${epicStory.id}`);
+          error('Story Creator may have failed silently or exited without creating the file.');
+          error('Check Story Creator agent logs for errors.');
+          error('Saving state and exiting. Run johnny-bmad again to resume.');
+          await saveState(cwd, state);
+          throw new Error(`Story file not created for ${epicStory.id}`);
+        }
+
+        // AC: 4 - Update progress display with "created" status after successful creation
+        displayProgress(currentStoryNum, totalStories, 'created');
+
+        // AC: 4 - Increment currentStoryIndex after successful story creation
+        state.workflow.currentStoryIndex = i + 1;
+        createSuccess = true;
+        break; // Success - exit retry loop
+      } catch (createError) {
+        const errorMessage =
+          createError instanceof Error ? createError.message : String(createError);
+
+        // Story 4-7: Check if error is retryable (network errors, API failures, rate limits)
+        // Retryable errors: ECONNREFUSED, ETIMEDOUT, ENOTFOUND, EAI_AGAIN, rate limit errors
+        // Non-retryable errors: Invalid file paths, permission denied (EACCES)
+        //
+        // Design decision: Permission errors (EACCES, "permission denied") are treated as non-retryable
+        // because they typically indicate fundamental filesystem or configuration issues that won't
+        // resolve with retry. Transient permission issues (e.g., network-based auth) are rare for this
+        // CLI tool's use case, so we fail fast to surface configuration problems to the user.
+        const isRetryable =
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('ENOTFOUND') ||
+          errorMessage.includes('EAI_AGAIN') ||
+          errorMessage.toLowerCase().includes('rate limit') ||
+          errorMessage.includes('Claude exited with code') ||
+          errorMessage.includes('ENOENT');
+
+        // Non-retryable errors: EACCES (permission denied), Invalid path/file errors
+        // Design decision: "Invalid" is only treated as non-retryable when it indicates
+        // a fundamental problem with the story path or file structure. This includes patterns
+        // like "Invalid story path", "Invalid file", but NOT transient errors like
+        // "Invalid response from server" (which may be retryable with backoff).
+        const isNonRetryable =
+          errorMessage.includes('EACCES') ||
+          errorMessage.includes('permission denied') ||
+          (errorMessage.includes('Invalid') &&
+            (errorMessage.includes('path') ||
+              errorMessage.includes('file') ||
+              errorMessage.includes('story')));
+
+        if (!isRetryable || isNonRetryable) {
+          // Non-retryable error - fail immediately
+          error(`Story Creator failed for ${epicStory.id}: ${errorMessage}`);
+          error('This error is not retryable. Please check your configuration and try again.');
+          error(
+            'Try: Check file permissions, verify paths are valid, or run johnny-bmad with --verbose for more details'
+          );
+          await saveState(cwd, state);
+          throw createError;
+        }
+
+        // Retryable error - apply retry logic
+        if (attempt < MAX_RETRIES) {
+          // Story 4-7 AC: 3 - Detect rate limit and apply 60s cooldown (case-insensitive)
+          // Note: The '429' check is technically case-insensitive (numbers have no case), while the
+          // 'rate limit' check uses toLowerCase() for case-insensitive matching. Both patterns are
+          // checked to ensure we catch both numeric HTTP status codes and textual error messages.
+          const isRateLimit =
+            errorMessage.toLowerCase().includes('rate limit') || errorMessage.includes('429');
+
+          if (isRateLimit) {
+            // AC: 3 - Rate limit detected: display warning and wait 60s
+            warn(`Rate limited. Waiting 60s...`);
+            await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_COOLDOWN));
+            warn('Retrying after cooldown...');
+          } else {
+            // AC: 2 - Normal retry with exponential backoff
+            const backoffMs = RETRY_DELAYS[attempt - 1]; // 2s, 4s, 8s
+            warn(
+              `Story Creator failed. Retrying in ${backoffMs / 1000}s... (attempt ${attempt}/${MAX_RETRIES})`
+            );
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          }
+        } else {
+          // AC: 5 - Max retries exceeded - display error block with state info
+          error(`Story Creator failed after ${MAX_RETRIES} attempts`);
+          error(`State saved at Story ${currentStoryNum}/${totalStories}`);
+          error(
+            `Try: Check network connection, verify API access, then restart johnny-bmad to retry`
+          );
+          // Note: Error guidance differs from Story Updater (line 742) which includes "address changes manually"
+          // because the Updater runs in a change request loop where manual edits are a valid recovery option.
+          await saveState(cwd, state);
+          process.exit(1); // Exit with code 1 per AC 5
+        }
       }
+    }
 
-      // AC: 4 - Update progress display with "created" status after successful creation
-      displayProgress(currentStoryNum, totalStories, 'created');
-
-      // AC: 4 - Increment currentStoryIndex after successful story creation
-      state.workflow.currentStoryIndex = i + 1;
-    } catch (createError) {
-      const errorMessage = createError instanceof Error ? createError.message : String(createError);
-      error(`Story creator failed for ${epicStory.id}: ${errorMessage}`);
-      error('Saving state and exiting. Run johnny-bmad again to resume.');
-      await saveState(cwd, state);
-      throw createError; // Re-throw to halt execution
+    // If all retries failed, exit the workflow
+    if (!createSuccess) {
+      throw new Error(`Failed to create story ${epicStory.id} after ${MAX_RETRIES} attempts`);
     }
 
     // Save state after each successful story creation
@@ -174,6 +290,234 @@ export async function runBatchStoryCreationLoop(
 }
 
 /**
+ * Check if batch story creation is already complete
+ *
+ * Determines if all stories in the batch have been approved by checking
+ * if all stories have the 'approved' status in the approvals record.
+ *
+ * Uses single-pass iteration for efficiency with large epic story counts.
+ *
+ * @param approvals - Record of story ID to approval status
+ * @returns true if all stories are approved and there is at least one approval
+ *
+ * @example
+ * ```typescript
+ * // All stories approved - returns true
+ * const approvals = {
+ *   'story-1': 'approved',
+ *   'story-2': 'approved',
+ *   'story-3': 'approved',
+ * };
+ * const isComplete = checkBatchAlreadyComplete(approvals);
+ * // Returns: true
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Mixed approval statuses - returns false
+ * const approvals = {
+ *   'story-1': 'approved',
+ *   'story-2': 'needs-changes',
+ *   'story-3': 'approved',
+ * };
+ * const isComplete = checkBatchAlreadyComplete(approvals);
+ * // Returns: false
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Empty approvals record - returns false
+ * const approvals = {};
+ * const isComplete = checkBatchAlreadyComplete(approvals);
+ * // Returns: false (no stories to check)
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // All pending - returns false
+ * const approvals = {
+ *   'story-1': 'pending',
+ *   'story-2': 'pending',
+ * };
+ * const isComplete = checkBatchAlreadyComplete(approvals);
+ * // Returns: false
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Null/undefined approvals - returns false (handles runtime errors)
+ * const isComplete = checkBatchAlreadyComplete(null as unknown as Record<string, 'approved'>);
+ * // Returns: false (safe fallback for null input)
+ * ```
+ */
+export function checkBatchAlreadyComplete(
+  approvals: Record<string, 'approved' | 'needs-changes' | 'pending'>
+): boolean {
+  // Single-pass iteration: check both approval status and count in one loop
+  // This is more efficient than calling Object.values().every() and Object.keys().length separately
+  let hasApprovals = false;
+  for (const storyId in approvals) {
+    hasApprovals = true;
+    if (approvals[storyId] !== 'approved') {
+      return false; // Early exit on first non-approved status
+    }
+  }
+  return hasApprovals; // true only if we found at least one approval AND all were approved
+}
+
+/**
+ * Display batch completion summary
+ *
+ * Shows a formatted summary after all stories are approved, including:
+ * - Completion header with visual separator
+ * - Total count of approved stories
+ * - List of all stories with titles and checkmarks
+ * - Next steps guidance (--dev-only mode)
+ *
+ * This is used by the batch workflow to provide clear feedback when story
+ * creation and review are complete.
+ *
+ * @param cwd - Current working directory
+ * @param epicStories - Array of epic story metadata
+ * @param approvals - Record of story ID to approval status
+ *
+ * @example
+ * ```typescript
+ * // Normal completion with 2 stories
+ * const epicStories = [
+ *   { id: 'story-1' },
+ *   { id: 'story-2' },
+ * ];
+ * const approvals = {
+ *   'story-1': 'approved',
+ *   'story-2': 'approved',
+ * };
+ * await displayBatchCompletionSummary('/project', epicStories, approvals);
+ * // Output:
+ * // ━━━ Batch Complete ━━━
+ * // [OK] All 2 stories created and approved
+ * // Ready for implementation:
+ * //   1. story-1: (title from file) ✓
+ * //   2. story-2: (title from file) ✓
+ * // Next: johnny-bmad --dev-only
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Null/undefined epicStories - handles runtime error gracefully
+ * await displayBatchCompletionSummary('/project', null as unknown as Array<{ id: string }>, {});
+ * // Output: (warning) Invalid stories array provided
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Empty stories array - displays warning and returns early
+ * const epicStories: Array<{ id: string }> = [];
+ * const approvals = {};
+ * await displayBatchCompletionSummary('/project', epicStories, approvals);
+ * // Output: (warning) No stories to display in completion summary
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Story file cannot be loaded - uses ID as fallback
+ * const epicStories = [
+ *   { id: 'story-1' },
+ *   { id: 'missing-story' }, // File doesn't exist
+ * ];
+ * const approvals = {
+ *   'story-1': 'approved',
+ *   'missing-story': 'approved',
+ * };
+ * await displayBatchCompletionSummary('/project', epicStories, approvals);
+ * // Output: displays story-1 with title, missing-story with "(unable to load title)"
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Corrupted story file - handles error gracefully
+ * const epicStories = [{ id: 'corrupted-story' }];
+ * const approvals = { 'corrupted-story': 'approved' };
+ * await displayBatchCompletionSummary('/project', epicStories, approvals);
+ * // Output: (warning) Could not load story file for corrupted-story: [error details]
+ * //         1. corrupted-story: (unable to load title) ✓
+ * ```
+ */
+export async function displayBatchCompletionSummary(
+  cwd: string,
+  epicStories: Array<{ id: string }>,
+  approvals: Record<string, 'approved' | 'needs-changes' | 'pending'>
+): Promise<void> {
+  try {
+    // Validate input - check for null/undefined approvals
+    if (!approvals || typeof approvals !== 'object') {
+      error('Invalid approvals record provided to completion summary');
+      return;
+    }
+
+    // Validate input - check for null/undefined or non-array epicStories
+    if (!epicStories || !Array.isArray(epicStories)) {
+      warn('Invalid stories array provided to completion summary');
+      return;
+    }
+
+    // Validate input - check for empty epicStories array
+    if (epicStories.length === 0) {
+      warn('No stories to display in completion summary');
+      return;
+    }
+
+    // Display completion header
+    // Note: Using chalk.bold.cyan() for visual appeal (intentional deviation from AC:1 plain text)
+    console.log();
+    console.log(chalk.bold.cyan('━━━ Batch Complete ━━━'));
+    displayStatus('ok', `All ${epicStories.length} stories created and approved`);
+    console.log();
+
+    // Display story list
+    console.log(chalk.bold('Ready for implementation:'));
+
+    // Track if any errors occurred during story loading
+    let hadLoadErrors = false;
+
+    // Load each story to get its title
+    for (let i = 0; i < epicStories.length; i++) {
+      const epicStory = epicStories[i];
+      try {
+        const story = await loadStory(cwd, epicStory.id);
+        const title = story?.title || epicStory.id;
+        console.log(`  ${i + 1}. ${epicStory.id}: ${title} ✓`);
+      } catch (error) {
+        // If story file cannot be loaded, still display entry with ID only
+        hadLoadErrors = true;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        warn(`Could not load story file for ${epicStory.id}: ${errorMessage}`);
+        console.log(`  ${i + 1}. ${epicStory.id}: (unable to load title) ✓`);
+      }
+    }
+
+    console.log();
+
+    // Display next steps message
+    const nextStepsMessage = chalk.bold('Next: johnny-bmad --dev-only');
+    console.log(nextStepsMessage);
+    console.log();
+
+    // If we had load errors, display a warning after the summary
+    if (hadLoadErrors) {
+      warn('Some story files could not be loaded. Titles may be missing above.');
+    }
+  } catch (error) {
+    // Handle unexpected errors from console operations or other issues
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    error(`Error displaying completion summary: ${errorMessage}`);
+    // Re-throw to allow caller to handle the error appropriately
+    // This prevents confusing users with both error and success messages
+    throw error;
+  }
+}
+
+/**
  * Run batch story review loop
  *
  * Reviews each story created in the story creation phase, allowing the user to approve
@@ -182,6 +526,7 @@ export async function runBatchStoryCreationLoop(
  *
  * **Implementation:** This function was implemented in Story 4-3 (implement-per-story-review-flow).
  * **Auto-Approve:** Story 4-5 adds auto-approve mode when args.yolo is true.
+ * **Completion:** Story 4-6 adds batch completion summary and clean exit.
  *
  * **Phase Header Behavior:** The "Review" phase header is displayed ONLY when starting from
  * the first story (currentStoryIndex === 0). On fresh starts, this is intuitive. On resume
@@ -196,11 +541,15 @@ export async function runBatchStoryCreationLoop(
  * approved without prompting the user. The approval prompt is skipped, and the story
  * is marked as 'approved' directly with a clear message indicating auto-approval.
  *
+ * **Completion Summary (Story 4-6):** When all stories are approved, displays a formatted
+ * summary with story list and next steps guidance. The workflow exits cleanly without
+ * proceeding to implementation (that's what --dev-only mode is for).
+ *
  * **Indexing Notes:**
  * - Internal state uses 0-based indexing (0 = first story)
  * - User display uses 1-based indexing (1 = first story)
  * - When resuming, loop starts at `currentStoryIndex` and continues to end
- * - After completion, workflow exits (no further phases in current batch implementation)
+ * - After completion, workflow exits with code 0 (no further phases in batch mode)
  *
  * @param cwd - Current working directory
  * @param state - Current workflow state (will be mutated and saved)
@@ -231,6 +580,16 @@ export async function runBatchStoryReviewLoop(
     error('Batch review requires stories to exist in sprint-status.yaml before running.');
     error('Exiting batch workflow. No stories to review.');
     // No phase transition - workflow will exit naturally
+    return;
+  }
+
+  // Story 4-6: Check if batch is already complete (resume-after-completion scenario)
+  // If all stories are already approved, display completion summary and exit
+  if (checkBatchAlreadyComplete(state.stories.approvals)) {
+    // Display "already" message to indicate resume scenario, then show completion summary
+    // AC:5 message: "All stories already created and approved. Run --dev-only to implement."
+    displayStatus('info', 'All stories already created and approved. Run --dev-only to implement.');
+    await displayBatchCompletionSummary(cwd, epicStories, state.stories.approvals);
     return;
   }
 
@@ -329,26 +688,86 @@ export async function runBatchStoryReviewLoop(
         await saveState(cwd, state);
 
         // AC: 3 - Re-invoke Story Creator agent with feedback
-        // Use retry logic (3 attempts, exponential backoff) for resilience
+        // Story 4-7: Enhanced retry logic with exponential backoff and rate limit detection
         let _updateSuccess = false;
-        for (let attempt = 1; attempt <= 3; attempt++) {
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           try {
             await runStoryUpdater(cwd, epicStory.id, story.filePath, userFeedback);
             _updateSuccess = true;
             break;
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            if (attempt < 3) {
-              warn(`Story updater attempt ${attempt}/3 failed: ${errorMessage}`);
-              const backoffMs = 2 ** attempt * 1000; // Exponential backoff: 2s, 4s
-              info(`Retrying in ${backoffMs / 1000}s...`);
-              await new Promise((resolve) => setTimeout(resolve, backoffMs));
-            } else {
-              error(`Failed to update story ${epicStory.id} after 3 attempts: ${errorMessage}`);
-              error('Try: Address the changes manually or run johnny-bmad again to retry.');
-              // Save error state and exit
+
+            // Story 4-7: Check if error is retryable
+            // Design decision: Permission errors (EACCES, "permission denied") are treated as non-retryable
+            // because they typically indicate fundamental filesystem or configuration issues. See comment in
+            // runBatchStoryCreationLoop for detailed rationale.
+            const isRetryable =
+              errorMessage.includes('ECONNREFUSED') ||
+              errorMessage.includes('ETIMEDOUT') ||
+              errorMessage.includes('ENOTFOUND') ||
+              errorMessage.includes('EAI_AGAIN') ||
+              errorMessage.toLowerCase().includes('rate limit') ||
+              errorMessage.includes('Claude exited with code') ||
+              errorMessage.includes('ENOENT');
+
+            // Non-retryable errors: EACCES (permission denied), Invalid path/file errors
+            // Design decision: "Invalid" is only treated as non-retryable when it indicates
+            // a fundamental problem with the story path or file structure. See detailed rationale
+            // in runBatchStoryCreationLoop.
+            const isNonRetryable =
+              errorMessage.includes('EACCES') ||
+              errorMessage.includes('permission denied') ||
+              (errorMessage.includes('Invalid') &&
+                (errorMessage.includes('path') ||
+                  errorMessage.includes('file') ||
+                  errorMessage.includes('story')));
+
+            if (!isRetryable || isNonRetryable) {
+              // Non-retryable error - fail immediately and exit with code 1 (per AC 5)
+              error(`Story Updater failed for ${epicStory.id}: ${errorMessage}`);
+              error('This error is not retryable. Please check your configuration.');
+              error(
+                'Try: Check file permissions, verify story file exists, or run johnny-bmad with --verbose for more details'
+              );
               await saveState(cwd, state);
-              return;
+              process.exit(1);
+            }
+
+            // Retryable error - apply retry logic
+            if (attempt < MAX_RETRIES) {
+              // Story 4-7 AC: 3 - Detect rate limit and apply 60s cooldown (case-insensitive)
+              // Note: The '429' check is technically case-insensitive (numbers have no case), while the
+              // 'rate limit' check uses toLowerCase() for case-insensitive matching. Both patterns are
+              // checked to ensure we catch both numeric HTTP status codes and textual error messages.
+              const isRateLimit =
+                errorMessage.toLowerCase().includes('rate limit') || errorMessage.includes('429');
+
+              if (isRateLimit) {
+                // AC: 3 - Rate limit detected: display warning and wait 60s
+                warn(`Rate limited. Waiting 60s...`);
+                await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_COOLDOWN));
+                warn('Retrying after cooldown...');
+              } else {
+                // AC: 2 - Normal retry with exponential backoff
+                const backoffMs = RETRY_DELAYS[attempt - 1]; // 2s, 4s, 8s
+                warn(
+                  `Story Updater failed. Retrying in ${backoffMs / 1000}s... (attempt ${attempt}/${MAX_RETRIES})`
+                );
+                await new Promise((resolve) => setTimeout(resolve, backoffMs));
+              }
+            } else {
+              // AC: 5 - Max retries exceeded - display error block with state info
+              error(`Story Updater failed after ${MAX_RETRIES} attempts`);
+              error(`State saved at Story ${i + 1}/${epicStories.length}`);
+              error(
+                `Try: Check network connection, verify API access, or address changes manually then restart johnny-bmad`
+              );
+              // Note: Error guidance includes "address changes manually" (unlike Story Creator at line 257)
+              // because the Updater runs in a change request loop where manual edits are a valid recovery option.
+              // Save error state and exit with code 1 per AC 5
+              await saveState(cwd, state);
+              process.exit(1);
             }
           }
         }
@@ -422,19 +841,18 @@ export async function runBatchStoryReviewLoop(
   );
 
   if (allApproved) {
-    // AC: 6 - All stories approved, transition to completion phase
-    // (Completion phase UI will be implemented in Story 4-6)
-    state.workflow.phase = 'completion';
+    // Story 4-6: Display completion summary and exit cleanly
+    // AC:4: Do NOT transition phase - keep it as 'review' to indicate completion
+    // The state.workflow.phase='review' is preserved for --dev-only mode to read from the saved state file
+    // The orchestrator will handle clean exit after this function returns
+    // Save final state before displaying completion summary
     await saveState(cwd, state);
 
-    // Story 4-5: Display auto-approve completion summary when yolo mode is active
-    if (args.yolo) {
-      displayStatus('ok', `All ${epicStories.length} stories created and approved (--yolo mode)`);
-      info('All stories approved. Review phase complete.');
-    } else {
-      info('All stories approved. Review phase complete.');
-    }
-    info('Completion phase will be implemented in Story 4-6.');
+    // Display the completion summary with story list
+    await displayBatchCompletionSummary(cwd, epicStories, state.stories.approvals);
+
+    // Return cleanly - the orchestrator will handle the exit
+    // Do NOT proceed to implementation (that's what --dev-only mode is for)
     return;
   }
 
@@ -688,7 +1106,18 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
     if (activeMode === 'batch') {
       // AC: 5 - Call runBatchWorkflow instead of showing warning
       await runBatchWorkflow(cwd, state!, args);
-      return;
+
+      // Story 4-6: Exit cleanly after batch workflow completes
+      // The batch workflow has completed its job (story creation + review)
+      // and should not proceed to implementation (that's what --dev-only mode is for)
+      //
+      // State is saved with phase='review' and all approvals recorded
+      // before runBatchWorkflow returns. The process.exit(0) here
+      // prevents fall-through to sequential implementation.
+      //
+      // AC:4 Compliance: state.workflow.phase remains 'review' (completed)
+      // and state is saved for future --dev-only run.
+      process.exit(0);
     } else if (activeMode === 'dev-only') {
       warn('Dev-only workflow not yet implemented');
       warn('        Try: Run without --dev-only flag for default sequential mode');
