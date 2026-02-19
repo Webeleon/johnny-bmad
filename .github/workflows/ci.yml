@@ -26,9 +26,9 @@ jobs:
       # Run orchestrator tests separately without coverage (they cause issues with Bun's coverage)
       - name: Run orchestrator tests
         run: bun test src/orchestrator.test.ts
-      # Run all other tests with coverage
+      # Run all other tests with coverage (explicitly listed due to Bun --exclude bug)
       - name: Run tests with coverage
-        run: bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --exclude="src/orchestrator.test.ts"
+        run: bun test --coverage --coverage-reporter=lcov --coverage-reporter=text src/config.test.ts src/index.test.ts src/types.test.ts src/ui/agent-line.test.ts src/ui/banner.test.ts src/ui/celebration.test.ts src/ui/error.test.ts src/ui/index.test.ts src/ui/phase-header.test.ts src/ui/progress.test.ts src/ui/status.test.ts src/ui/story-card.test.ts src/ui/unicode-support.test.ts src/utils/files.test.ts src/utils/stream-wrapper.test.ts src/utils/user-input.test.ts
       - name: Check coverage threshold
         uses: VeryGoodOpenSource/very_good_coverage@v3
         with:
