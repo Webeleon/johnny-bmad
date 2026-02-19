@@ -83,3 +83,32 @@ Do NOT fix issues automatically. Do NOT ask for clarification on this choice.
 export function getTestCommand(customCommand?: string): string {
   return customCommand || 'npm test';
 }
+
+export function getUpdateStoryPrompt(
+  storyId: string,
+  storyFilePath: string,
+  feedback: string
+): string {
+  return `Execute BMAD update-story workflow:
+
+Story to update:
+- Story ID: ${storyId}
+- Story File: ${storyFilePath}
+- User Feedback: ${feedback}
+
+<steps CRITICAL="TRUE">
+1. Load the FULL story file from: ${storyFilePath}
+2. Read the user's change request feedback carefully
+3. Update the story file to address the feedback
+4. Use the Edit tool to modify the existing story file in-place (do NOT create a new file)
+5. Ensure all sections (Story, Acceptance Criteria, Tasks/Subtasks, Dev Notes) are updated consistently
+6. Save the updated story file to the same path (${storyFilePath})
+</steps>
+
+IMPORTANT:
+- You MUST update the EXISTING story file at ${storyFilePath}
+- DO NOT create a new story file
+- Address ALL aspects of the user's feedback
+- Maintain consistency across all story sections
+- Preserve the story's overall structure and format`;
+}
