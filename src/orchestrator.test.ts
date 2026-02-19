@@ -9,6 +9,7 @@ import {
   runBatchStoryCreationLoop,
   runBatchStoryReviewLoop,
   runBatchWorkflow,
+  runDevOnlyWorkflow,
   runOrchestrator,
 } from './orchestrator.js';
 import type { CliArgs, State } from './types.js';
@@ -203,6 +204,11 @@ describe('runOrchestrator() - Mode Routing', () => {
         undefined
       );
 
+      // Mock process.exit to prevent test runner termination
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(0) called');
+      });
+
       const args: CliArgs = {
         resume: true,
         help: false,
@@ -214,9 +220,12 @@ describe('runOrchestrator() - Mode Routing', () => {
 
       try {
         await runOrchestrator(args);
-
-        // Verify the batch workflow was called and completed
-        expect(infoSpy).toHaveBeenCalled();
+        // Should not reach here - process.exit should be called
+        expect(true).toBe(false);
+      } catch (err) {
+        // Verify process.exit(0) was called (batch workflow calls it)
+        expect(processExitSpy).toHaveBeenCalledWith(0);
+        expect((err as Error).message).toBe('process.exit(0) called');
       } finally {
         // Restore all mocks
         checkClaudeSpy.mockRestore();
@@ -240,12 +249,13 @@ describe('runOrchestrator() - Mode Routing', () => {
         displayAgentActivitySpy.mockRestore();
         storyFileExistsSpy.mockRestore();
         runStoryCreatorSpy.mockRestore();
+        processExitSpy.mockRestore();
       }
     });
   });
 
   describe('dev-only mode routing', () => {
-    test('should warn and return when state.workflow.mode is dev-only', async () => {
+    test('should call runDevOnlyWorkflow when state.workflow.mode is dev-only', async () => {
       // Mock pre-flight dependencies
       const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(
         Promise.resolve(true)
@@ -297,6 +307,17 @@ describe('runOrchestrator() - Mode Routing', () => {
         { id: '2-1-test', status: 'ready-for-dev' },
       ]);
 
+      // Mock UI components to prevent side effects
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+
+      // Mock process.exit to prevent test runner termination and capture the call
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(0) called');
+      });
+
       const args: CliArgs = {
         resume: true,
         help: false,
@@ -308,12 +329,12 @@ describe('runOrchestrator() - Mode Routing', () => {
 
       try {
         await runOrchestrator(args);
-
-        // Verify warn() was called with placeholder message
-        expect(warnSpy).toHaveBeenCalledWith('Dev-only workflow not yet implemented');
-        expect(warnSpy).toHaveBeenCalledWith(
-          '        Try: Run without --dev-only flag for default sequential mode'
-        );
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (err) {
+        // Verify process.exit(0) was called
+        expect(processExitSpy).toHaveBeenCalledWith(0);
+        expect((err as Error).message).toBe('process.exit(0) called');
       } finally {
         // Restore all mocks
         checkClaudeSpy.mockRestore();
@@ -332,6 +353,109 @@ describe('runOrchestrator() - Mode Routing', () => {
         loadEpicsSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        processExitSpy.mockRestore();
+      }
+    });
+
+    // AC 3: Dedicated test to verify runDevOnlyWorkflow is called when mode is dev-only
+    test('AC 3: should invoke runDevOnlyWorkflow function when activeMode is dev-only', async () => {
+      // Mock pre-flight dependencies
+      const checkClaudeSpy = spyOn(claudeCli, 'checkClaudeInstalled').mockReturnValue(
+        Promise.resolve(true)
+      );
+      const isBmadSpy = spyOn(files, 'isBmadProject').mockReturnValue(Promise.resolve(true));
+      const ensureOutputSpy = spyOn(files, 'ensureOutputDir').mockResolvedValue(undefined);
+      const isGitRepoSpy = spyOn(gitCommit, 'isGitRepo').mockReturnValue(Promise.resolve(true));
+
+      // Mock logger functions
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const successSpy = spyOn(logger, 'success').mockImplementation(() => {});
+      const headerSpy = spyOn(logger, 'header').mockImplementation(() => {});
+      const stepSpy = spyOn(logger, 'step').mockImplementation(() => {});
+      const successWithTimingSpy = spyOn(logger, 'successWithTiming').mockImplementation(() => {});
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+      const startTimerSpy = spyOn(timer, 'startSessionTimer').mockImplementation(() => {});
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+
+      // State with dev-only mode triggers the routing
+      const mockState = {
+        currentEpic: 'epic-5',
+        lastUpdated: '2026-02-06T00:00:00.000Z',
+        workflow: {
+          mode: 'dev-only' as const,
+          phase: 'implementation' as const,
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const loadStateSpy = spyOn(config, 'loadState').mockReturnValue(Promise.resolve(mockState));
+      const loadEpicsSpy = spyOn(files, 'loadEpics').mockReturnValue(Promise.resolve([]));
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockReturnValue(
+        Promise.resolve({
+          development_status: {
+            'epic-5': 'in-progress',
+            '5-1-test': 'ready-for-dev',
+          },
+        })
+      );
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      // Mock process.exit to capture the call
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(0) called');
+      });
+
+      const args: CliArgs = {
+        resume: true,
+        help: false,
+        verbose: false,
+        yolo: false,
+        batch: false,
+        devOnly: false,
+      };
+
+      try {
+        await runOrchestrator(args);
+        expect(true).toBe(false); // Should not reach here
+      } catch (err) {
+        // AC 3: Verify the dev-only workflow was executed
+        // We verify this by checking:
+        // 1. process.exit(0) was called (which only happens after runDevOnlyWorkflow)
+        // 2. displayPhaseHeader was called with 'Implementation' (specific to dev-only workflow)
+        expect(processExitSpy).toHaveBeenCalledWith(0);
+        expect(displayPhaseHeaderSpy).toHaveBeenCalledWith('Implementation');
+        expect((err as Error).message).toBe('process.exit(0) called');
+      } finally {
+        checkClaudeSpy.mockRestore();
+        isBmadSpy.mockRestore();
+        ensureOutputSpy.mockRestore();
+        isGitRepoSpy.mockRestore();
+        infoSpy.mockRestore();
+        successSpy.mockRestore();
+        headerSpy.mockRestore();
+        stepSpy.mockRestore();
+        successWithTimingSpy.mockRestore();
+        warnSpy.mockRestore();
+        startTimerSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        loadStateSpy.mockRestore();
+        loadEpicsSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        processExitSpy.mockRestore();
       }
     });
   });
@@ -407,6 +531,11 @@ describe('runOrchestrator() - Mode Routing', () => {
         undefined
       );
 
+      // Mock process.exit to prevent test runner termination
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(0) called');
+      });
+
       const args: CliArgs = {
         resume: true,
         help: false,
@@ -418,10 +547,13 @@ describe('runOrchestrator() - Mode Routing', () => {
 
       try {
         await runOrchestrator(args);
-
+        // Should not reach here - process.exit should be called
+        expect(true).toBe(false);
+      } catch (err) {
         // Should route to batch (from state), not dev-only (from CLI)
-        expect(infoSpy).toHaveBeenCalled();
+        expect(processExitSpy).toHaveBeenCalledWith(0);
         expect(warnSpy).not.toHaveBeenCalledWith('Dev-only workflow not yet implemented');
+        expect((err as Error).message).toBe('process.exit(0) called');
       } finally {
         // Restore all mocks
         checkClaudeSpy.mockRestore();
@@ -445,6 +577,7 @@ describe('runOrchestrator() - Mode Routing', () => {
         displayAgentActivitySpy.mockRestore();
         storyFileExistsSpy.mockRestore();
         runStoryCreatorSpy.mockRestore();
+        processExitSpy.mockRestore();
       }
     });
   });
@@ -6381,6 +6514,316 @@ output_folder: "_bmad-output"
 
       // Verify exit code is 1 for non-retryable errors
       expect(exitCode).toBe(1);
+    });
+  });
+});
+
+// Story 5-1: Implement runDevOnlyWorkflow Function Shell
+describe('runDevOnlyWorkflow() - Story 5-1', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: false,
+    batch: false,
+    devOnly: true,
+  };
+
+  describe('AC: 1 - Function signature and export', () => {
+    test('should be exported as a function', () => {
+      expect(typeof runDevOnlyWorkflow).toBe('function');
+    });
+
+    test('should accept parameters: cwd, state, and args', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      // Setup all necessary mocks for the function to complete
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      try {
+        // AC 1: Verify function signature accepts cwd (string), state (State), args (CliArgs)
+        const mockCwd = '/test/project';
+        const mockArgs: CliArgs = {
+          resume: false,
+          help: false,
+          verbose: false,
+          yolo: false,
+          batch: false,
+          devOnly: true,
+        };
+
+        // The function should be callable with these parameter types
+        // TypeScript compiler validates types at compile time, runtime validates the call works
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+        // Verify state was modified (proves function ran with correct parameters)
+        expect(mockState.workflow.phase).toBe('implementation');
+        expect(saveStateSpy).toHaveBeenCalledWith(mockCwd, mockState);
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC: 2 - Initial state setup', () => {
+    test('should set state.workflow.phase to implementation at function start', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'story-creation', // Will be changed to 'implementation'
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+        // Verify phase was set to 'implementation'
+        expect(mockState.workflow.phase).toBe('implementation');
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+      }
+    });
+
+    test('should call saveState before proceeding with workflow logic', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+        // Verify saveState was called
+        expect(saveStateSpy).toHaveBeenCalled();
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC: 4 - Story detection with error handling', () => {
+    test('should display error and exit with code 1 when no stories found', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {},
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([]);
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+
+      // Mock process.exit to prevent test runner termination and capture the call
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(1) called');
+      });
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (err) {
+        // Verify error message was displayed
+        expect(displayStatusSpy).toHaveBeenCalledWith('error', 'No stories found for epic');
+        expect(errorSpy).toHaveBeenCalledWith('Dev-only mode requires pre-created stories');
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Try: Run johnny-bmad --batch first to create stories'
+        );
+
+        // Verify process.exit(1) was called
+        expect(processExitSpy).toHaveBeenCalledWith(1);
+        expect((err as Error).message).toBe('process.exit(1) called');
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        errorSpy.mockRestore();
+        processExitSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC: 5 - Phase header and placeholder', () => {
+    test('should display phase header when stories exist', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+        // Verify phase header was displayed
+        expect(displayPhaseHeaderSpy).toHaveBeenCalledWith('Implementation');
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+      }
+    });
+
+    test('should not display phase header when no stories found', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {},
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([]);
+      const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      // Mock process.exit to prevent test runner termination
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(1) called');
+      });
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+      } catch {
+        // Verify phase header was NOT displayed (no stories)
+        expect(displayPhaseHeaderSpy).not.toHaveBeenCalled();
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        displayStatusSpy.mockRestore();
+        errorSpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        processExitSpy.mockRestore();
+      }
     });
   });
 });

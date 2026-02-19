@@ -918,6 +918,69 @@ export async function runBatchWorkflow(cwd: string, state: State, args: CliArgs)
   }
 }
 
+/**
+ * Run dev-only workflow for implementing pre-created stories
+ *
+ * This function handles the dev-only workflow mode, which skips story creation
+ * and review phases and proceeds directly to implementation. It requires stories
+ * to already exist (created via batch mode).
+ *
+ * **Phase Behavior:** Dev-only mode only uses the 'implementation' phase,
+ * as story creation and review are handled by the batch workflow.
+ *
+ * **Story Detection:** Loads stories from sprint-status.yaml for the current epic.
+ * If no stories are found, displays an error and exits with guidance to run
+ * batch mode first.
+ *
+ * @param cwd - Current working directory
+ * @param state - Current workflow state (will be mutated and saved)
+ * @param args - Parsed CLI arguments (unused but kept for consistency with other workflows)
+ * @returns Promise that resolves when the dev-only workflow completes
+ *
+ * @internal
+ */
+export async function runDevOnlyWorkflow(cwd: string, state: State, _args: CliArgs): Promise<void> {
+  // Note: args parameter is currently unused but kept for consistency with other workflows
+  // and future extensibility (e.g., yolo mode for auto-approval)
+
+  // AC: 2 - Set phase to 'implementation' at function start
+  state.workflow.phase = 'implementation';
+
+  // AC: 2 - Save state before proceeding with any workflow logic
+  await saveState(cwd, state);
+
+  // AC: 4 - Load sprint status and get stories for current epic
+  const sprintStatus = await loadSprintStatus(cwd);
+  const epicStories = getAllStoriesForEpic(sprintStatus, state.currentEpic);
+
+  // AC: 4 - Check if stories array is empty
+  if (epicStories.length === 0) {
+    // AC: 4 - Display error with recovery guidance
+    displayStatus('error', 'No stories found for epic');
+    error('Dev-only mode requires pre-created stories');
+    error('Try: Run johnny-bmad --batch first to create stories');
+    // AC: 4 - Exit with error code 1
+    process.exit(1);
+  }
+
+  // AC: 5 (Task 5) - Display phase header
+  displayPhaseHeader('Implementation');
+
+  // TODO: Stories 5-2 through 5-6 will implement the implementation loop
+  // Summary: This loop will find ready stories, run dev agent, run review agent,
+  // handle review feedback, commit approved changes, and celebrate completion.
+  // Detailed breakdown:
+  // - Story 5-2: Story detection and pre-implementation display
+  // - Story 5-3: Dev agent execution with retry
+  // - Story 5-4: Reviewer agent execution with retry
+  // - Story 5-5: Dev-review loop and commit flow
+  // - Story 5-6: Dev-only completion with celebration
+
+  // AC: 5 (Task 5) - Placeholder return for successful completion
+  // (no stories to implement yet - will be replaced by implementation loop)
+  return;
+}
+
 export async function runOrchestrator(args: CliArgs): Promise<void> {
   const cwd = process.cwd();
   const maxIterations = args.maxIterations ?? 10;
@@ -1119,9 +1182,9 @@ export async function runOrchestrator(args: CliArgs): Promise<void> {
       // and state is saved for future --dev-only run.
       process.exit(0);
     } else if (activeMode === 'dev-only') {
-      warn('Dev-only workflow not yet implemented');
-      warn('        Try: Run without --dev-only flag for default sequential mode');
-      return;
+      // AC: 3 - Call runDevOnlyWorkflow instead of showing warning
+      await runDevOnlyWorkflow(cwd, state!, args);
+      process.exit(0);
     }
 
     // Sequential mode (default) - existing story loop code continues below
