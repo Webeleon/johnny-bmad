@@ -35,11 +35,11 @@ development_status:
   4-6-implement-batch-completion-and-exit: done
   4-7-implement-retry-logic-for-story-creator: done
   epic-4-retrospective: optional
-  epic-5: in-progress
+  epic-5: done
   5-1-implement-rundevonlyworkflow-function-shell: done
   5-2-implement-story-detection-and-pre-implementation-display: done
   5-3-implement-dev-agent-execution-with-retry: done
-  5-4-implement-reviewer-agent-execution-with-retry: backlog
-  5-5-implement-dev-review-loop-and-commit-flow: backlog
-  5-6-implement-dev-only-completion-with-celebration: backlog
+  5-4-implement-reviewer-agent-execution-with-retry: done
+  5-5-implement-dev-review-loop-and-commit-flow: done
+  5-6-implement-dev-only-completion-with-celebration: done
   epic-5-retrospective: optional

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { isUnicodeSupported } from './unicode-support.js';
 
 export interface CelebrationStats {
-  stories: number;
+  stories: number | string;
   files: number;
   duration: string;
 }

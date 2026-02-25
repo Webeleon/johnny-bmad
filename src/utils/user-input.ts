@@ -93,3 +93,46 @@ export async function confirmContinueNextEpic(nextEpicId: string): Promise<boole
   ]);
   return continueNext;
 }
+
+export type MaxIterationsPromptAction = 'skip' | 'retry' | 'abort';
+
+/**
+ * Prompt user for action when max dev/review iterations reached (Story 5-5)
+ *
+ * Displays the standard prompt format:
+ * [S] Skip story  [R] Retry  [A] Abort
+ *
+ * @param storyId - Story ID for display
+ * @param maxIterations - Maximum iterations that were reached
+ * @returns Promise<'skip' | 'retry' | 'abort'> - User's chosen action
+ * @throws {Error} If inquirer prompt fails unexpectedly
+ * @exits Process exits with code 1 when user selects 'abort' (handled by caller)
+ *
+ * @example
+ * ```typescript
+ * const action = await promptMaxIterationsAction('5-5-loop', 3);
+ * // User sees: [S] Skip story  [R] Retry  [A] Abort
+ * // Returns: 'skip', 'retry', or 'abort'
+ * ```
+ *
+ * @since 1.0.0
+ */
+export async function promptMaxIterationsAction(
+  storyId: string,
+  maxIterations: number
+): Promise<MaxIterationsPromptAction> {
+  const { action } = await inquirer.prompt<{ action: MaxIterationsPromptAction }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: `Max iterations (${maxIterations}) reached for ${storyId}\n       Manual intervention required`,
+      choices: [
+        { name: '[S] Skip story', value: 'skip' },
+        { name: '[R] Retry', value: 'retry' },
+        { name: '[A] Abort', value: 'abort' },
+      ],
+    },
+  ]);
+
+  return action;
+}
