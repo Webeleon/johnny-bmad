@@ -6,7 +6,7 @@ import { runStoryCreator, runStoryUpdater } from './agents/story-creator.js';
 import { checkClaudeInstalled } from './claude/cli.js';
 import { clearState, createInitialState, loadState, saveState } from './config.js';
 import { commitStoryChanges, isGitRepo } from './git/commit.js';
-import type { CliArgs, Epic, State, WorkflowMode } from './types.js';
+import type { CliArgs, Epic, SprintStatus, State, WorkflowMode } from './types.js';
 import { displayAgentActivity } from './ui/agent-line.js';
 import { displayPhaseHeader } from './ui/phase-header.js';
 import { displayProgress } from './ui/progress.js';
@@ -17,6 +17,7 @@ import {
   findOngoingWork,
   getAllStoriesForEpic,
   getEpicsFromSprintStatus,
+  getStoryFilePath,
   isBmadProject,
   loadEpics,
   loadSprintStatus,
@@ -49,7 +50,7 @@ import {
  * These constants control the retry behavior for Story Creator and Story Updater
  * agents when they encounter transient failures (network errors, API rate limits, etc.)
  *
- * **TECHNICAL DEBT NOTE (Story 4-7, Story 4-4)**: The retry logic is duplicated between
+ * @TODO TECHNICAL DEBT (Story 4-7, Story 4-4): The retry logic is duplicated between
  * runBatchStoryCreationLoop() (lines 147-247) and runBatchStoryReviewLoop() (lines 661-729).
  * This violates DRY principle and ARCH-6 which calls for a reusable retryableOperation() function.
  *
@@ -919,6 +920,535 @@ export async function runBatchWorkflow(cwd: string, state: State, args: CliArgs)
 }
 
 /**
+ * Known story development status values from sprint-status.yaml
+ *
+ * This is a union type of allowed status strings for a story's development lifecycle.
+ * Note: This is distinct from the StoryStatus interface in types.ts which represents
+ * a story object with id, title, and status fields.
+ *
+ * **When to use:**
+ * - Use `StoryDevStatus` for sprint-status.yaml values (string literals like 'ready-for-dev')
+ * - Use `StoryStatus` interface for full story objects with metadata (id, title, status)
+ *
+ * @example
+ * ```typescript
+ * // StoryDevStatus - use for sprint-status.yaml values
+ * const devStatus: StoryDevStatus = sprintStatus.development_status['5-1-shell'];
+ *
+ * // StoryStatus - use for loaded story objects
+ * const story: StoryStatus = await loadStory(cwd, '5-1-shell');
+ * ```
+ *
+ * @since 1.0.0
+ */
+/**
+ * Story development status values for sprint-status.yaml
+ *
+ * **Status Semantics:**
+ * - `'ready-for-dev'` - Story is fully specified, approved, and ready for implementation
+ * - `'ready'` - Legacy alias for 'ready-for-dev' (treated identically by findOngoingWork)
+ * - `'backlog'` - Story is defined but not yet prioritized for development
+ * - `'in-progress'` - Story is currently being implemented
+ * - `'review'` - Implementation complete, awaiting code review
+ * - `'done'` - Story fully complete (review passed, merged)
+ * - `'pending'` - Story awaiting dependencies or prerequisites
+ *
+ * **Note on 'ready' vs 'ready-for-dev':**
+ * Both statuses indicate the story is ready for implementation. 'ready-for-dev' is the
+ * canonical status used by the dev-story workflow. 'ready' is a legacy alias maintained
+ * for backward compatibility with older sprint-status.yaml files. findOngoingWork()
+ * treats both identically when searching for actionable stories.
+ *
+ * @example
+ * ```typescript
+ * // Canonical status for new stories
+ * const status: StoryDevStatus = 'ready-for-dev';
+ *
+ * // Legacy alias (still valid, treated same as ready-for-dev)
+ * const legacyStatus: StoryDevStatus = 'ready';
+ * ```
+ *
+ * @since 1.0.0
+ */
+export type StoryDevStatus =
+  | 'ready-for-dev'
+  | 'backlog'
+  | 'in-progress'
+  | 'review'
+  | 'done'
+  | 'ready'
+  | 'pending';
+
+/**
+ * Story information for implementation (Story 5-2)
+ *
+ * Represents a story ready for implementation with all necessary metadata.
+ * Used by loadStoriesForImplementation() to filter and prepare stories.
+ *
+ * @since 1.0.0
+ */
+export interface StoryForImplementation {
+  id: string;
+  title: string;
+  status: StoryDevStatus;
+  approvalStatus: 'approved' | 'needs-changes' | 'pending' | 'manual';
+}
+
+/**
+ * Load stories for implementation from sprint-status (Story 5-2)
+ *
+ * Filters stories to only those ready for implementation (excludes 'done' stories).
+ * Loads story titles from story files and determines approval status from state.
+ *
+ * **Story Detection (AC 1, 2, 3):**
+ * - Uses getAllStoriesForEpic() from utils/files.ts
+ * - Loads stories from _bmad-output/implementation-artifacts/
+ * - Detects batch-created stories and reads approval status from state
+ * - Detects manually created stories (assumed approved)
+ *
+ * **Filtering Logic:**
+ * - Include: ready-for-dev, backlog, in-progress, review
+ * - Exclude: done (already implemented)
+ *
+ * @param cwd - Current working directory
+ * @param sprintStatus - Sprint status from sprint-status.yaml
+ * @param epicId - Current epic ID (e.g., 'epic-5')
+ * @param approvals - Approval statuses from state.stories.approvals
+ * @returns Array of stories ready for implementation
+ *
+ * @example
+ * ```typescript
+ * // Single story scenario
+ * const sprintStatus = await loadSprintStatus(cwd);
+ * const stories = await loadStoriesForImplementation(
+ *   cwd,
+ *   sprintStatus,
+ *   'epic-5',
+ *   state.stories.approvals
+ * );
+ * // Returns stories with status !== 'done'
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Multi-story scenario with mixed approval statuses
+ * const approvals = {
+ *   '5-1-shell': 'approved',
+ *   '5-2-detection': 'pending',
+ *   '5-3-retry': 'needs-changes',
+ * };
+ * const stories = await loadStoriesForImplementation(cwd, sprintStatus, 'epic-5', approvals);
+ * // Returns: [
+ * //   { id: '5-1-shell', title: 'Shell implementation', status: 'ready-for-dev', approvalStatus: 'approved' },
+ * //   { id: '5-2-detection', title: 'Story detection', status: 'backlog', approvalStatus: 'pending' },
+ * //   { id: '5-3-retry', title: 'Dev agent retry', status: 'backlog', approvalStatus: 'needs-changes' },
+ * //   { id: '5-4-manual', title: 'Manual story', status: 'ready-for-dev', approvalStatus: 'manual' },
+ * // ]
+ * ```
+ *
+ * @since 1.0.0
+ */
+export async function loadStoriesForImplementation(
+  cwd: string,
+  sprintStatus: SprintStatus | null,
+  epicId: string,
+  approvals: Record<string, 'approved' | 'needs-changes' | 'pending'>
+): Promise<StoryForImplementation[]> {
+  // AC 1 - Use getAllStoriesForEpic() from utils/files.ts
+  const epicStories = getAllStoriesForEpic(sprintStatus, epicId);
+
+  // Warn if epicId not found (helps catch configuration errors early)
+  if (epicStories.length === 0 && sprintStatus?.development_status) {
+    // Check if the epic exists at all
+    const hasEpicKey = Object.keys(sprintStatus.development_status).some(
+      (key) => key === epicId || key === epicId.replace('epic-', '')
+    );
+    if (!hasEpicKey) {
+      warn(`Epic "${epicId}" not found in sprint-status.yaml`);
+    }
+  }
+
+  // AC 1 - Filter to only stories with status not 'done'
+  // Include: ready-for-dev, backlog, in-progress, review
+  // Exclude: done
+  const actionableStories = epicStories.filter((story) => story.status !== 'done');
+
+  // Load each story to get title and determine approval status
+  const storiesForImplementation: StoryForImplementation[] = [];
+
+  for (const epicStory of actionableStories) {
+    // AC 1.3 - Load each story file using loadStory() to get title and metadata
+    const story = await loadStory(cwd, epicStory.id);
+
+    // Log warning if story file fails to load (fallback to ID as title)
+    if (!story) {
+      warn(`Could not load story file for ${epicStory.id}, using ID as title`);
+    }
+
+    // AC 2 - Check approval status from state (batch-created stories)
+    // AC 3 - Manual stories assumed approved (no approval status required)
+    // Note: Stories with no approval record in state are treated as 'manual' (assumed approved).
+    // This handles both manually-created stories and edge cases where batch-created stories
+    // have corrupted/missing approval status in state.
+    let approvalStatus: StoryForImplementation['approvalStatus'];
+    const validApprovalStatuses = ['approved', 'needs-changes', 'pending'] as const;
+    type ValidApprovalStatus = (typeof validApprovalStatuses)[number];
+
+    if (approvals[epicStory.id]) {
+      const rawStatus = approvals[epicStory.id];
+      // Runtime validation for approval status (defensive against corrupted state)
+      if (validApprovalStatuses.includes(rawStatus as ValidApprovalStatus)) {
+        approvalStatus = rawStatus as ValidApprovalStatus;
+      } else {
+        // Invalid approval status - treat as manual with warning
+        warn(
+          `Invalid approval status "${String(rawStatus)}" for story ${epicStory.id}, treating as manual`
+        );
+        approvalStatus = 'manual';
+      }
+    } else {
+      // Manual story - assume approved
+      approvalStatus = 'manual';
+    }
+
+    storiesForImplementation.push({
+      id: epicStory.id,
+      // AC 1.3 - Use title from story file, fallback to ID
+      title: story?.title || epicStory.id,
+      status: epicStory.status as StoryDevStatus,
+      approvalStatus,
+    });
+  }
+
+  return storiesForImplementation;
+}
+
+/**
+ * Get approval status badge for display
+ *
+ * Returns a formatted badge string based on approval status with consistent color coding:
+ * - approved: green
+ * - needs-changes: red (attention required)
+ * - pending: yellow (awaiting action)
+ * - manual: blue (no approval workflow)
+ *
+ * @param status - Approval status
+ * @returns Formatted badge string with ANSI colors
+ *
+ * @example
+ * ```typescript
+ * getApprovalBadge('approved');  // '\x1b[32m[approved]\x1b[0m'
+ * getApprovalBadge('pending');   // '\x1b[33m[pending]\x1b[0m'
+ * ```
+ *
+ * @since 1.0.0
+ */
+export function getApprovalBadge(status: StoryForImplementation['approvalStatus']): string {
+  switch (status) {
+    case 'approved':
+      return chalk.green('[approved]');
+    case 'needs-changes':
+      return chalk.red('[needs-changes]'); // Red for attention
+    case 'pending':
+      return chalk.yellow('[pending]'); // Yellow for awaiting
+    case 'manual':
+      return chalk.blue('[manual]');
+    default:
+      // Fallback for unexpected values (useful for debugging invalid status)
+      return chalk.gray('[unknown]');
+  }
+}
+
+/**
+ * Run Dev agent with retry logic (Story 5-3)
+ *
+ * Executes the Dev agent with automatic retry on transient failures.
+ * Implements exponential backoff (2s, 4s, 8s) and rate limit handling.
+ *
+ * **Retry Configuration:**
+ * - MAX_RETRIES = 3
+ * - RETRY_DELAYS = [2000, 4000, 8000] (exponential backoff)
+ * - RATE_LIMIT_COOLDOWN = 60000 (60 seconds)
+ *
+ * **Error Classification:**
+ * - **Retryable:** ECONNREFUSED, ETIMEDOUT, ENOTFOUND, EAI_AGAIN, rate limit, Claude exit codes, ENOENT
+ * - **Non-retryable:** EACCES, permission denied, Invalid path/file errors
+ *
+ * **State Persistence:**
+ * - State is saved BEFORE spawn by the caller (runDevOnlyImplementationLoop)
+ * - State is saved BEFORE throwing on non-retryable errors (ensures resume capability)
+ * - State is saved BEFORE process.exit on max retries (ensures resume capability)
+ *
+ * **Double State-Save Behavior (Non-Retryable Errors):**
+ * When a non-retryable error occurs, state is saved twice:
+ * 1. In runDevAgentWithRetry (line ~1227) - saves state before throwing
+ * 2. In runDevOnlyImplementationLoop (line ~1308-1309) - caller saves state before calling
+ *
+ * This is INTENTIONAL and provides redundancy:
+ * - The caller's save ensures state is persisted before ANY risky operation
+ * - The function's save ensures state is persisted even if the caller doesn't handle errors
+ * - Both saves use the same index (i), so no data inconsistency - just redundant write
+ *
+ * Future refactoring could consolidate by having runDevAgentWithRetry NOT save state
+ * and letting the caller handle it, but current approach is defensive and safe.
+ *
+ * **Design Decision - Error Handling Strategy:**
+ * Non-retryable errors (e.g., EACCES, Invalid path) throw the original error, allowing
+ * callers to handle configuration issues differently (e.g., log specific guidance,
+ * attempt alternative paths, or continue with remaining stories). Max retries exceeded
+ * uses process.exit(1) because transient failures after full retry indicate system-level
+ * issues requiring user intervention before continuing. Both paths save state first to
+ * enable resume capability.
+ *
+ * @param cwd - Current working directory
+ * @param storyId - Story ID (e.g., '5-3-implement-dev-agent-execution-with-retry')
+ * @param storyFilePath - Full path to the story file
+ * @param currentStoryNum - 1-based story number for display (e.g., 3 for "Story 3/8")
+ * @param totalStories - Total number of stories in the epic
+ * @param state - Current workflow state (saved before throw/exit on errors)
+ *
+ * @throws Re-throws the original error for non-retryable errors AFTER saving state.
+ *         Callers should handle the error appropriately (e.g., exit or continue).
+ *
+ * @exits Calls process.exit(1) when max retries are exceeded - saves state before exit
+ *        to enable resume from the current story index
+ *
+ * @example
+ * ```typescript
+ * // Successful execution
+ * await runDevAgentWithRetry('/project', '5-1-shell', '/path/to/story.md', 1, 8, state);
+ * // Output: [Dev] Implementing 5-1-shell...
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Retry on network error
+ * // Output: [WARN] Dev agent failed. Retrying in 2s... (attempt 1/3)
+ * ```
+ *
+ * @since 1.0.0
+ */
+export async function runDevAgentWithRetry(
+  cwd: string,
+  storyId: string,
+  storyFilePath: string,
+  currentStoryNum: number,
+  totalStories: number,
+  state: State
+): Promise<void> {
+  // AC 1.3 - Display agent activity
+  displayAgentActivity('Dev', `Implementing ${storyId}...`);
+
+  // Retry loop with exponential backoff
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // AC 1.5 - Spawn Dev agent via existing runDevAgent() function
+      await runDevAgent(cwd, storyId, storyFilePath);
+
+      // Success - return to caller
+      return;
+    } catch (devError) {
+      const errorMessage = devError instanceof Error ? devError.message : String(devError);
+
+      // AC 1.7 - Detect retryable errors
+      const isRetryable =
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('EAI_AGAIN') ||
+        errorMessage.toLowerCase().includes('rate limit') ||
+        errorMessage.includes('429') ||
+        errorMessage.includes('Claude exited with code') ||
+        errorMessage.includes('ENOENT');
+
+      // AC 1.8 - Detect non-retryable errors
+      const isNonRetryable =
+        errorMessage.includes('EACCES') ||
+        errorMessage.includes('permission denied') ||
+        (errorMessage.includes('Invalid') &&
+          (errorMessage.includes('path') ||
+            errorMessage.includes('file') ||
+            errorMessage.includes('story')));
+
+      if (!isRetryable || isNonRetryable) {
+        // Non-retryable error - fail immediately
+        // Save state before throwing to ensure resume capability (consistency with max retries case)
+        await saveState(cwd, state);
+        error(`Dev agent failed for ${storyId}: ${errorMessage}`);
+        error('This error is not retryable. Please check your configuration.');
+        error(
+          'Try: Check file permissions, verify paths are valid, or run johnny-bmad with --verbose for more details'
+        );
+        throw devError;
+      }
+
+      // Retryable error - apply retry logic
+      if (attempt < MAX_RETRIES) {
+        // AC 1.9 - Detect rate limit and apply 60s cooldown
+        const isRateLimit =
+          errorMessage.toLowerCase().includes('rate limit') || errorMessage.includes('429');
+
+        if (isRateLimit) {
+          // AC 4 - Rate limit detected: display warning and wait 60s
+          warn('Rate limited. Waiting 60s...');
+          await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_COOLDOWN));
+        } else {
+          // AC 1.10 - Normal retry with exponential backoff
+          const backoffMs = RETRY_DELAYS[attempt - 1]; // 2s, 4s, 8s
+          warn(
+            `Dev agent failed. Retrying in ${backoffMs / 1000}s... (attempt ${attempt}/${MAX_RETRIES})`
+          );
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        }
+      } else {
+        // AC 1.11 - Max retries exceeded - display error block with state info
+        error(`Dev agent failed after ${MAX_RETRIES} attempts`);
+        error(`State saved at Story ${currentStoryNum}/${totalStories}`);
+        error(
+          'Try: Check network connection, verify API access, then restart johnny-bmad to retry'
+        );
+        // Save state before exit to ensure resume capability (matches Story Creator pattern)
+        await saveState(cwd, state);
+        process.exit(1);
+      }
+    }
+  }
+}
+
+/**
+ * Run dev-only implementation loop (Story 5-3)
+ *
+ * Iterates through stories and executes the Dev agent for each one.
+ * Handles state persistence for resume capability and displays progress.
+ *
+ * **Implementation Loop:**
+ * 1. Start from state.workflow.currentStoryIndex (enables resume)
+ * 2. For each story:
+ *    - Display progress
+ *    - Save state BEFORE spawning Dev agent
+ *    - Call runDevAgentWithRetry() with error handling
+ *    - Update state.workflow.currentStoryIndex after success
+ *    - Save state after completion
+ *
+ * @param cwd - Current working directory
+ * @param state - Current workflow state (will be mutated and saved)
+ * @param args - Parsed CLI arguments (currently unused but kept for future extensibility;
+ *               potential future uses include: yolo mode for auto-approval, verbose logging,
+ *               custom retry configuration, or story filtering by ID/pattern)
+ * @param stories - Array of stories to implement
+ *
+ * @internal
+ */
+export async function runDevOnlyImplementationLoop(
+  cwd: string,
+  state: State,
+  _args: CliArgs,
+  stories: StoryForImplementation[]
+): Promise<void> {
+  // Get the starting index from state (resumes from stored index for fresh start)
+  const startIndex = state.workflow.currentStoryIndex;
+
+  // AC 2.3 - Iterate through stories using state.workflow.currentStoryIndex
+  for (let i = startIndex; i < stories.length; i++) {
+    const story = stories[i];
+    const currentStoryNum = i + 1; // 1-based for display
+    const totalStories = stories.length;
+
+    // AC 2.7 - Display progress using displayProgress()
+    displayProgress(currentStoryNum, totalStories, 'implementing');
+
+    // AC 2.4 - Save state BEFORE spawning Dev agent (critical for resume capability)
+    state.workflow.currentStoryIndex = i;
+    await saveState(cwd, state);
+
+    // AC 2.4 - Call runDevAgentWithRetry() with proper parameters
+    await runDevAgentWithRetry(
+      cwd,
+      story.id,
+      getStoryFilePath(cwd, story.id),
+      currentStoryNum,
+      totalStories,
+      state
+    );
+
+    // AC 2.5 - Update state.workflow.currentStoryIndex after successful Dev agent run
+    state.workflow.currentStoryIndex = i + 1;
+
+    // AC 2.6 - Save state after each story completion
+    await saveState(cwd, state);
+
+    // AC 2.8 - Placeholder for Reviewer agent (Story 5-4)
+    // TODO: Story 5-4 will add Reviewer agent execution here
+  }
+}
+
+/**
+ * Display pre-implementation summary (Story 5-2)
+ *
+ * Shows a formatted summary of stories to be implemented before starting
+ * the implementation loop. Includes story count, epic ID, and numbered list.
+ *
+ * **Display Format (AC 4):**
+ * ```
+ * ━━━ Dev-Only Mode: Implementation ━━━
+ * Found 8 stories for epic: user-authentication
+ *
+ * Stories to implement:
+ *   1. STORY-001: Implement login form
+ *   2. STORY-002: Add session management
+ *   ...
+ *
+ * Starting implementation...
+ * ```
+ *
+ * @param epicId - Current epic ID (e.g., 'epic-5')
+ * @param stories - Array of stories to implement
+ *
+ * @example
+ * ```typescript
+ * displayPreImplementationSummary('epic-5', [
+ *   { id: '5-1-shell', title: 'Implement runDevOnlyWorkflow shell', status: 'ready-for-dev', approvalStatus: 'approved' },
+ *   { id: '5-2-detection', title: 'Story detection', status: 'backlog', approvalStatus: 'manual' },
+ * ]);
+ * ```
+ *
+ * @since 1.0.0
+ */
+export function displayPreImplementationSummary(
+  epicId: string,
+  stories: StoryForImplementation[]
+): void {
+  // Input validation guard - prevent misleading output for empty array
+  if (stories.length === 0) {
+    warn('displayPreImplementationSummary called with empty stories array');
+    return;
+  }
+
+  // AC 4.2 - Display phase header using displayPhaseHeader
+  displayPhaseHeader('Implementation');
+
+  // AC 4.3 - Display story count: "Found N stories for epic: {epicId}"
+  console.log();
+  console.log(chalk.bold(`Found ${stories.length} stories for epic: ${epicId}`));
+  console.log();
+
+  // AC 4.4 - Display numbered list of stories with titles and approval status badges
+  console.log(chalk.bold('Stories to implement:'));
+  for (let i = 0; i < stories.length; i++) {
+    const story = stories[i];
+    // Display approval status badge
+    const badge = getApprovalBadge(story.approvalStatus);
+    console.log(`  ${i + 1}. ${story.id}: ${story.title} ${badge}`);
+  }
+
+  console.log();
+
+  // AC 4.5 - Display "Starting implementation..." message
+  console.log(chalk.cyan('Starting implementation...'));
+  console.log();
+}
+
+/**
  * Run dev-only workflow for implementing pre-created stories
  *
  * This function handles the dev-only workflow mode, which skips story creation
@@ -937,47 +1467,60 @@ export async function runBatchWorkflow(cwd: string, state: State, args: CliArgs)
  * @param args - Parsed CLI arguments (unused but kept for consistency with other workflows)
  * @returns Promise that resolves when the dev-only workflow completes
  *
+ * @throws This function calls process.exit() and never returns normally:
+ *   - process.exit(1) when no stories found for epic (error condition)
+ *   - process.exit(0) when user declines confirmation prompt (user cancelled)
+ *
  * @internal
  */
-export async function runDevOnlyWorkflow(cwd: string, state: State, _args: CliArgs): Promise<void> {
-  // Note: args parameter is currently unused but kept for consistency with other workflows
-  // and future extensibility (e.g., yolo mode for auto-approval)
-
-  // AC: 2 - Set phase to 'implementation' at function start
+export async function runDevOnlyWorkflow(cwd: string, state: State, args: CliArgs): Promise<void> {
+  // AC 2 - Set phase to 'implementation' at function start
   state.workflow.phase = 'implementation';
 
-  // AC: 2 - Save state before proceeding with any workflow logic
+  // AC 2 - Save state before proceeding with any workflow logic
   await saveState(cwd, state);
 
-  // AC: 4 - Load sprint status and get stories for current epic
+  // AC 1, 2, 3 - Load stories for implementation using helper function
   const sprintStatus = await loadSprintStatus(cwd);
-  const epicStories = getAllStoriesForEpic(sprintStatus, state.currentEpic);
+  const storiesForImplementation = await loadStoriesForImplementation(
+    cwd,
+    sprintStatus,
+    state.currentEpic,
+    state.stories.approvals
+  );
 
-  // AC: 4 - Check if stories array is empty
-  if (epicStories.length === 0) {
-    // AC: 4 - Display error with recovery guidance
+  // AC 1 - Check if stories array is empty
+  if (storiesForImplementation.length === 0) {
+    // AC 1 - Display error with recovery guidance
     displayStatus('error', 'No stories found for epic');
-    error('Dev-only mode requires pre-created stories');
+    error('Dev-only mode requires pre-created stories that are not yet complete');
     error('Try: Run johnny-bmad --batch first to create stories');
-    // AC: 4 - Exit with error code 1
+    // AC 1 - Exit with error code 1
     process.exit(1);
   }
 
-  // AC: 5 (Task 5) - Display phase header
-  displayPhaseHeader('Implementation');
+  // AC 4 - Display pre-implementation summary
+  displayPreImplementationSummary(state.currentEpic, storiesForImplementation);
 
-  // TODO: Stories 5-2 through 5-6 will implement the implementation loop
-  // Summary: This loop will find ready stories, run dev agent, run review agent,
-  // handle review feedback, commit approved changes, and celebrate completion.
-  // Detailed breakdown:
-  // - Story 5-2: Story detection and pre-implementation display
-  // - Story 5-3: Dev agent execution with retry
-  // - Story 5-4: Reviewer agent execution with retry
-  // - Story 5-5: Dev-review loop and commit flow
-  // - Story 5-6: Dev-only completion with celebration
+  // AC 5, 6 - Confirmation prompt logic
+  if (!args.yolo) {
+    // AC 5 - Prompt for confirmation when yolo is false
+    const shouldProceed = await confirmAction('Proceed with implementation? [Y/n]', true);
 
-  // AC: 5 (Task 5) - Placeholder return for successful completion
-  // (no stories to implement yet - will be replaced by implementation loop)
+    if (!shouldProceed) {
+      // AC 5 - On 'n', exit with code 0 (user cancelled)
+      info('Implementation cancelled by user');
+      process.exit(0);
+    }
+  }
+  // AC 6 - If yolo is true, skip prompt and proceed immediately (no code needed)
+
+  // Story 5-3: Call runDevOnlyImplementationLoop() with loaded stories
+  await runDevOnlyImplementationLoop(cwd, state, args, storiesForImplementation);
+
+  // Story 5-6: Dev-only completion with celebration (placeholder)
+  // TODO: Story 5-6 will add completion celebration here
+  info(`Implementation complete for ${storiesForImplementation.length} stories`);
   return;
 }
 

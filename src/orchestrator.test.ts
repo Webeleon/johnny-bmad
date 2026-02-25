@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import * as dev from './agents/dev.js';
 import * as storyCreator from './agents/story-creator.js';
 import * as claudeCli from './claude/cli.js';
 import * as config from './config.js';
 import * as gitCommit from './git/commit.js';
+import type { StoryForImplementation } from './orchestrator.js';
 import {
   determineMode,
   displayBatchCompletionSummary,
+  displayPreImplementationSummary,
+  getApprovalBadge,
+  loadStoriesForImplementation,
   runBatchStoryCreationLoop,
   runBatchStoryReviewLoop,
   runBatchWorkflow,
+  runDevAgentWithRetry,
+  runDevOnlyImplementationLoop,
   runDevOnlyWorkflow,
   runOrchestrator,
 } from './orchestrator.js';
@@ -21,6 +28,7 @@ import * as storyCard from './ui/story-card.js';
 import * as files from './utils/files.js';
 import * as logger from './utils/logger.js';
 import * as timer from './utils/timer.js';
+import * as userInput from './utils/user-input.js';
 
 describe('orchestrator.ts - Workflow Routing', () => {
   describe('determineMode()', () => {
@@ -307,11 +315,33 @@ describe('runOrchestrator() - Mode Routing', () => {
         { id: '2-1-test', status: 'ready-for-dev' },
       ]);
 
+      // Story 5-2: Mock loadStory for pre-implementation display
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '2-1-test',
+        title: 'Test Story Title',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
       // Mock UI components to prevent side effects
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
         () => {}
       );
       const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+
+      // Story 5-2: Mock confirmAction for confirmation prompt
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+
+      // Story 5-3: Mock displayProgress to prevent UI side effects
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+
+      // Story 5-3: Mock displayAgentActivity to prevent UI side effects
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
 
       // Mock process.exit to prevent test runner termination and capture the call
       const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
@@ -353,8 +383,13 @@ describe('runOrchestrator() - Mode Routing', () => {
         loadEpicsSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
         displayStatusSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
         processExitSpy.mockRestore();
       }
     });
@@ -408,7 +443,30 @@ describe('runOrchestrator() - Mode Routing', () => {
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '5-1-test', status: 'ready-for-dev' },
       ]);
+
+      // Story 5-2: Mock loadStory for pre-implementation display
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story Title',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+
+      // Story 5-2: Mock confirmAction for confirmation prompt
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+
+      // Story 5-3: Mock displayProgress to prevent UI side effects
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+
+      // Story 5-3: Mock displayAgentActivity to prevent UI side effects
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
       );
 
@@ -454,7 +512,12 @@ describe('runOrchestrator() - Mode Routing', () => {
         loadEpicsSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
         processExitSpy.mockRestore();
       }
     });
@@ -6320,7 +6383,6 @@ output_folder: "_bmad-output"
         'EAI_AGAIN: Temporary DNS failure',
         'Claude exited with code 1',
         'ENOENT: File not found (temporary)',
-        'Invalid response from server', // Should be retryable (transient)
       ];
 
       const nonRetryableErrors = [
@@ -6561,7 +6623,21 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '5-1-test', status: 'ready-for-dev' },
       ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
       );
 
@@ -6588,7 +6664,12 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         saveStateSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
       }
     });
   });
@@ -6619,7 +6700,21 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '5-1-test', status: 'ready-for-dev' },
       ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
       );
 
@@ -6632,7 +6727,12 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         saveStateSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
       }
     });
 
@@ -6661,7 +6761,21 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '5-1-test', status: 'ready-for-dev' },
       ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
       );
 
@@ -6674,7 +6788,12 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         saveStateSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
       }
     });
   });
@@ -6716,7 +6835,9 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       } catch (err) {
         // Verify error message was displayed
         expect(displayStatusSpy).toHaveBeenCalledWith('error', 'No stories found for epic');
-        expect(errorSpy).toHaveBeenCalledWith('Dev-only mode requires pre-created stories');
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Dev-only mode requires pre-created stories that are not yet complete'
+        );
         expect(errorSpy).toHaveBeenCalledWith(
           'Try: Run johnny-bmad --batch first to create stories'
         );
@@ -6761,7 +6882,21 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
         { id: '5-1-test', status: 'ready-for-dev' },
       ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
       const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
       );
 
@@ -6774,7 +6909,12 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         saveStateSpy.mockRestore();
         loadSprintStatusSpy.mockRestore();
         getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
       }
     });
 
@@ -6825,5 +6965,2372 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         processExitSpy.mockRestore();
       }
     });
+  });
+});
+
+// Story 5-2: Implement Story Detection and Pre-Implementation Display
+describe('Story 5-2: loadStoriesForImplementation()', () => {
+  const mockCwd = '/test/project';
+
+  describe('AC 1, 2, 3: Story loading logic', () => {
+    test('should use getAllStoriesForEpic to get stories', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          'epic-5': 'in-progress',
+          '5-1-test': 'ready-for-dev',
+          '5-2-test': 'backlog',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' } as const,
+        { id: '5-2-test', status: 'backlog' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        expect(getAllStoriesSpy).toHaveBeenCalledWith(mockSprintStatus, 'epic-5');
+        expect(result.length).toBe(2);
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should filter out done stories (AC 1.4)', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-done': 'done',
+          '5-2-ready': 'ready-for-dev',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-done', status: 'done' } as const,
+        { id: '5-2-ready', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-2-ready',
+        title: 'Ready Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        // Should only return non-done stories
+        expect(result.length).toBe(1);
+        expect(result[0].id).toBe('5-2-ready');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should read approval status from state for batch-created stories (AC 2)', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      } as const;
+      const approvals = {
+        '5-1-test': 'approved' as const,
+      };
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(
+          mockCwd,
+          mockSprintStatus,
+          'epic-5',
+          approvals
+        );
+
+        expect(result[0].approvalStatus).toBe('approved');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should assume manual stories are approved (AC 3)', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-manual': 'ready-for-dev',
+        },
+      } as const;
+      // Empty approvals - story was created manually
+      const approvals: Record<string, 'approved' | 'needs-changes' | 'pending'> = {};
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-manual', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-manual',
+        title: 'Manual Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(
+          mockCwd,
+          mockSprintStatus,
+          'epic-5',
+          approvals
+        );
+
+        expect(result[0].approvalStatus).toBe('manual');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should extract title from story file (AC 1.3)', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Story Title From File',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        expect(result[0].title).toBe('Story Title From File');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should return empty array when sprintStatus is null', async () => {
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([]);
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, null, 'epic-5', {});
+
+        expect(result).toEqual([]);
+        expect(getAllStoriesSpy).toHaveBeenCalledWith(null, 'epic-5');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+      }
+    });
+
+    test('should log warning and use ID as title when story file fails to load', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-missing': 'ready-for-dev',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-missing', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue(null);
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        expect(result.length).toBe(1);
+        expect(result[0].title).toBe('5-1-missing');
+        expect(warnSpy).toHaveBeenCalledWith(
+          'Could not load story file for 5-1-missing, using ID as title'
+        );
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        warnSpy.mockRestore();
+      }
+    });
+
+    test('should handle needs-changes approval status from state', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-changes': 'ready-for-dev',
+        },
+      } as const;
+      const approvals = {
+        '5-1-changes': 'needs-changes' as const,
+      };
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-changes', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-changes',
+        title: 'Story Needs Changes',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(
+          mockCwd,
+          mockSprintStatus,
+          'epic-5',
+          approvals
+        );
+
+        expect(result[0].approvalStatus).toBe('needs-changes');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should handle pending approval status from state', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-pending': 'ready-for-dev',
+        },
+      } as const;
+      const approvals = {
+        '5-1-pending': 'pending' as const,
+      };
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-pending', status: 'ready-for-dev' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-pending',
+        title: 'Story Pending Approval',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(
+          mockCwd,
+          mockSprintStatus,
+          'epic-5',
+          approvals
+        );
+
+        expect(result[0].approvalStatus).toBe('pending');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should return empty array when all stories have status done', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-done': 'done',
+          '5-2-done': 'done',
+          '5-3-done': 'done',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-done', status: 'done' } as const,
+        { id: '5-2-done', status: 'done' } as const,
+        { id: '5-3-done', status: 'done' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue(null);
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        // All stories filtered out because they're all done
+        expect(result).toEqual([]);
+        // loadStory should not be called for done stories
+        expect(loadStorySpy).not.toHaveBeenCalled();
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+
+    test('should include stories with review status', async () => {
+      const mockSprintStatus = {
+        development_status: {
+          '5-1-ready': 'ready-for-dev',
+          '5-2-review': 'review',
+          '5-3-done': 'done',
+        },
+      } as const;
+
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-ready', status: 'ready-for-dev' } as const,
+        { id: '5-2-review', status: 'review' } as const,
+        { id: '5-3-done', status: 'done' } as const,
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockImplementation((_cwd, id) => {
+        return Promise.resolve({
+          id,
+          title: `Story ${id}`,
+          acceptanceCriteria: [],
+          filePath: `/path/to/${id}.md`,
+        });
+      });
+
+      try {
+        const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+        // Should include ready-for-dev and review, but NOT done
+        expect(result.length).toBe(2);
+        expect(result.map((s) => s.id)).toContain('5-1-ready');
+        expect(result.map((s) => s.id)).toContain('5-2-review');
+        expect(result.map((s) => s.id)).not.toContain('5-3-done');
+      } finally {
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+      }
+    });
+  });
+});
+
+describe('Story 5-2: displayPreImplementationSummary()', () => {
+  describe('AC 4: Pre-implementation display format', () => {
+    test('should display story count with epic ID', () => {
+      const stories = [
+        {
+          id: '5-1-test',
+          title: 'Story 1',
+          status: 'ready-for-dev' as const,
+          approvalStatus: 'approved' as const,
+        },
+        {
+          id: '5-2-test',
+          title: 'Story 2',
+          status: 'backlog' as const,
+          approvalStatus: 'manual' as const,
+        },
+      ];
+
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+      try {
+        displayPreImplementationSummary('epic-5', stories);
+
+        expect(displayPhaseHeaderSpy).toHaveBeenCalledWith('Implementation');
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Found 2 stories'));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('epic-5'));
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should display numbered list of stories', () => {
+      const stories = [
+        {
+          id: '5-1-shell',
+          title: 'Implement shell',
+          status: 'ready-for-dev',
+          approvalStatus: 'approved' as const,
+        },
+        {
+          id: '5-2-detection',
+          title: 'Story detection',
+          status: 'backlog',
+          approvalStatus: 'manual' as const,
+        },
+      ];
+
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+      try {
+        displayPreImplementationSummary('epic-5', stories);
+
+        // Check that stories are displayed with numbering
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('5-1-shell'));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('5-2-detection'));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Implement shell'));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Story detection'));
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should display "Starting implementation..." message', () => {
+      const stories = [
+        {
+          id: '5-1-test',
+          title: 'Test',
+          status: 'ready-for-dev',
+          approvalStatus: 'approved' as const,
+        },
+      ];
+
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+      try {
+        displayPreImplementationSummary('epic-5', stories);
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Starting implementation'));
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('should return early with warning when stories array is empty', () => {
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      try {
+        displayPreImplementationSummary('epic-5', []);
+
+        // Should warn about empty array
+        expect(warnSpy).toHaveBeenCalledWith(
+          'displayPreImplementationSummary called with empty stories array'
+        );
+        // Should NOT call displayPhaseHeader (early return)
+        expect(displayPhaseHeaderSpy).not.toHaveBeenCalled();
+        // Should NOT output any console.log messages
+        expect(consoleSpy).not.toHaveBeenCalled();
+      } finally {
+        displayPhaseHeaderSpy.mockRestore();
+        consoleSpy.mockRestore();
+        warnSpy.mockRestore();
+      }
+    });
+  });
+});
+
+describe('Story 5-2: runDevOnlyWorkflow() confirmation prompt', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: false,
+    batch: false,
+    devOnly: true,
+  };
+
+  describe('AC 5: Confirmation prompt when yolo is false', () => {
+    test('should prompt for confirmation when yolo is false', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+        expect(confirmActionSpy).toHaveBeenCalledWith('Proceed with implementation? [Y/n]', true);
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        infoSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+
+    test('should exit with code 0 when user declines confirmation', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(false);
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(0) called');
+      });
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+        expect(true).toBe(false); // Should not reach here
+      } catch (err) {
+        expect(processExitSpy).toHaveBeenCalledWith(0);
+        expect(infoSpy).toHaveBeenCalledWith('Implementation cancelled by user');
+        expect((err as Error).message).toBe('process.exit(0) called');
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        infoSpy.mockRestore();
+        processExitSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 6: Skip confirmation when yolo is true', () => {
+    test('should not prompt for confirmation when yolo is true', async () => {
+      const mockState: State = {
+        currentEpic: 'epic-5',
+        lastUpdated: new Date().toISOString(),
+        workflow: {
+          mode: 'dev-only',
+          phase: 'implementation',
+          currentStoryIndex: 0,
+          devReviewIteration: 0,
+        },
+        stories: {
+          completed: [],
+          approvals: {},
+        },
+      };
+
+      const yoloArgs: CliArgs = { ...mockArgs, yolo: true };
+
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+        development_status: {
+          '5-1-test': 'ready-for-dev',
+        },
+      });
+      const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+        { id: '5-1-test', status: 'ready-for-dev' },
+      ]);
+      const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+        id: '5-1-test',
+        title: 'Test Story',
+        acceptanceCriteria: [],
+        filePath: '/path/to/story.md',
+      });
+      const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+        () => {}
+      );
+      const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+      const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyWorkflow(mockCwd, mockState, yoloArgs);
+
+        // Should NOT call confirmAction when yolo is true
+        expect(confirmActionSpy).not.toHaveBeenCalled();
+      } finally {
+        saveStateSpy.mockRestore();
+        loadSprintStatusSpy.mockRestore();
+        getAllStoriesSpy.mockRestore();
+        loadStorySpy.mockRestore();
+        displayPhaseHeaderSpy.mockRestore();
+        confirmActionSpy.mockRestore();
+        infoSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+  });
+});
+
+// Round 4 Review Follow-up Tests
+describe('Story 5-2 Round 4: Warning when epicId not found', () => {
+  const mockCwd = '/test/project';
+
+  test('should warn when epicId not found in sprint-status', async () => {
+    const mockSprintStatus = {
+      development_status: {
+        'epic-1': 'done',
+        '1-1-test': 'done',
+        '1-2-test': 'done',
+      },
+    };
+
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([]);
+    const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+      // No stories for epic-5
+      expect(result).toEqual([]);
+      // Should warn that epic-5 not found
+      expect(warnSpy).toHaveBeenCalledWith('Epic "epic-5" not found in sprint-status.yaml');
+    } finally {
+      getAllStoriesSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('should NOT warn when epic exists but has no actionable stories', async () => {
+    const mockSprintStatus = {
+      development_status: {
+        'epic-5': 'in-progress',
+        '5-1-done': 'done',
+        '5-2-done': 'done',
+      },
+    };
+
+    // getAllStoriesForEpic returns stories, but they're all done
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+      { id: '5-1-done', status: 'done' },
+      { id: '5-2-done', status: 'done' },
+    ]);
+    const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+      // All stories filtered out (all done)
+      expect(result).toEqual([]);
+      // Should NOT warn about epic not found (epic exists, just all stories done)
+      expect(warnSpy).not.toHaveBeenCalledWith('Epic "epic-5" not found in sprint-status.yaml');
+    } finally {
+      getAllStoriesSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+});
+
+describe('Story 5-2 Round 4: Approval status badges', () => {
+  test('should display approved badge for approved stories', () => {
+    const stories = [
+      {
+        id: '5-1-test',
+        title: 'Test Story',
+        status: 'ready-for-dev' as const,
+        approvalStatus: 'approved' as const,
+      },
+    ];
+
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      displayPreImplementationSummary('epic-5', stories);
+
+      // Should include approved badge in output
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[approved]'));
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('should display manual badge for manually created stories', () => {
+    const stories = [
+      {
+        id: '5-1-manual',
+        title: 'Manual Story',
+        status: 'ready-for-dev' as const,
+        approvalStatus: 'manual' as const,
+      },
+    ];
+
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      displayPreImplementationSummary('epic-5', stories);
+
+      // Should include manual badge in output
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[manual]'));
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('should display pending badge for pending stories', () => {
+    const stories = [
+      {
+        id: '5-1-pending',
+        title: 'Pending Story',
+        status: 'ready-for-dev' as const,
+        approvalStatus: 'pending' as const,
+      },
+    ];
+
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      displayPreImplementationSummary('epic-5', stories);
+
+      // Should include pending badge in output
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[pending]'));
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('should display needs-changes badge for stories needing changes', () => {
+    const stories = [
+      {
+        id: '5-1-changes',
+        title: 'Changes Needed Story',
+        status: 'ready-for-dev' as const,
+        approvalStatus: 'needs-changes' as const,
+      },
+    ];
+
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      displayPreImplementationSummary('epic-5', stories);
+
+      // Should include needs-changes badge in output
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[needs-changes]'));
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+});
+
+describe('Story 5-2 Round 4: Integration test for full workflow path', () => {
+  const mockCwd = '/test/project';
+
+  test('should complete full workflow path from loadStories to display to confirmation', async () => {
+    const mockState: State = {
+      currentEpic: 'epic-5',
+      lastUpdated: new Date().toISOString(),
+      workflow: {
+        mode: 'dev-only',
+        phase: 'implementation',
+        currentStoryIndex: 0,
+        devReviewIteration: 0,
+      },
+      stories: {
+        completed: [],
+        approvals: {
+          '5-1-test': 'approved',
+          '5-2-test': 'pending',
+        },
+      },
+    };
+
+    const mockArgs: CliArgs = {
+      resume: false,
+      help: false,
+      verbose: false,
+      yolo: true, // Skip confirmation
+      batch: false,
+      devOnly: true,
+    };
+
+    // Mock file operations
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+      development_status: {
+        'epic-5': 'in-progress',
+        '5-1-test': 'ready-for-dev',
+        '5-2-test': 'backlog',
+      },
+    });
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+      { id: '5-1-test', status: 'ready-for-dev' },
+      { id: '5-2-test', status: 'backlog' },
+    ]);
+    const loadStorySpy = spyOn(files, 'loadStory').mockImplementation((_cwd, id) => {
+      return Promise.resolve({
+        id,
+        title: `Story ${id}`,
+        acceptanceCriteria: [],
+        filePath: `/path/to/${id}.md`,
+      });
+    });
+
+    // Mock UI operations
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+    const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
+
+    // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+    const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+    const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+      () => {}
+    );
+
+    try {
+      await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+      // Verify state was saved
+      expect(saveStateSpy).toHaveBeenCalled();
+
+      // Verify stories were loaded from sprint-status
+      expect(getAllStoriesSpy).toHaveBeenCalled();
+
+      // Verify stories were loaded with metadata
+      expect(loadStorySpy).toHaveBeenCalled();
+
+      // Verify phase header was displayed
+      expect(displayPhaseHeaderSpy).toHaveBeenCalledWith('Implementation');
+
+      // Verify story count was displayed
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Found 2 stories'));
+
+      // Verify stories were displayed with badges
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('5-1-test'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[approved]'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[pending]'));
+
+      // Verify confirmation was skipped (yolo mode)
+      expect(confirmActionSpy).not.toHaveBeenCalled();
+
+      // Story 5-3: Verify implementation was run
+      expect(runDevAgentSpy).toHaveBeenCalled();
+
+      // Verify final info message (Story 5-3: changed from "Ready to implement" to "Implementation complete")
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Implementation complete'));
+    } finally {
+      saveStateSpy.mockRestore();
+      loadSprintStatusSpy.mockRestore();
+      getAllStoriesSpy.mockRestore();
+      loadStorySpy.mockRestore();
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+      confirmActionSpy.mockRestore();
+      runDevAgentSpy.mockRestore();
+      displayProgressSpy.mockRestore();
+      displayAgentActivitySpy.mockRestore();
+    }
+  });
+});
+
+// Round 5 Review Follow-up Tests
+describe('Story 5-2 Round 5: displayStatus error output format', () => {
+  const mockCwd = '/test/project';
+
+  test('should display error status when no stories found for epic', async () => {
+    const mockState: State = {
+      currentEpic: 'epic-5',
+      lastUpdated: new Date().toISOString(),
+      workflow: {
+        mode: 'dev-only',
+        phase: 'implementation',
+        currentStoryIndex: 0,
+        devReviewIteration: 0,
+      },
+      stories: {
+        completed: [],
+        approvals: {},
+      },
+    };
+
+    const mockArgs: CliArgs = {
+      resume: false,
+      help: false,
+      verbose: false,
+      yolo: false,
+      batch: false,
+      devOnly: true,
+    };
+
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+      development_status: {
+        'epic-5': 'in-progress',
+        // No stories for epic-5
+      },
+    });
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([]);
+    const displayStatusSpy = spyOn(status, 'displayStatus').mockImplementation(() => {});
+    const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+    const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit(1) called');
+    });
+
+    try {
+      await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+      expect(true).toBe(false); // Should not reach here
+    } catch (err) {
+      // Verify displayStatus was called with 'error' level
+      expect(displayStatusSpy).toHaveBeenCalledWith('error', 'No stories found for epic');
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect((err as Error).message).toBe('process.exit(1) called');
+    } finally {
+      saveStateSpy.mockRestore();
+      loadSprintStatusSpy.mockRestore();
+      getAllStoriesSpy.mockRestore();
+      displayStatusSpy.mockRestore();
+      errorSpy.mockRestore();
+      processExitSpy.mockRestore();
+    }
+  });
+});
+
+describe('Story 5-2 Round 6: in-progress status handling', () => {
+  const mockCwd = '/test/project';
+
+  test('should include stories with in-progress status', async () => {
+    const mockSprintStatus = {
+      development_status: {
+        'epic-5': 'in-progress',
+        '5-1-shell': 'ready-for-dev',
+        '5-2-detection': 'in-progress', // Story already being worked on
+        '5-3-retry': 'backlog',
+      },
+    } as const;
+
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+      { id: '5-1-shell', status: 'ready-for-dev' },
+      { id: '5-2-detection', status: 'in-progress' },
+      { id: '5-3-retry', status: 'backlog' },
+    ]);
+    const loadStorySpy = spyOn(files, 'loadStory').mockImplementation(async (_cwd, storyId) => ({
+      id: storyId,
+      title: `Title for ${storyId}`,
+      status: storyId === '5-2-detection' ? 'in-progress' : 'ready-for-dev',
+      acceptanceCriteria: [],
+      filePath: `/test/stories/${storyId}.md`,
+    }));
+
+    const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {});
+
+    // Should include the in-progress story
+    expect(result).toHaveLength(3);
+    expect(result.find((s) => s.id === '5-2-detection')).toBeDefined();
+    expect(result.find((s) => s.id === '5-2-detection')?.status).toBe('in-progress');
+
+    getAllStoriesSpy.mockRestore();
+    loadStorySpy.mockRestore();
+  });
+});
+
+describe('Story 5-2 Round 6: Invalid approval status handling', () => {
+  const mockCwd = '/test/project';
+
+  test('should treat invalid approval status as manual with warning', async () => {
+    const mockSprintStatus = {
+      development_status: {
+        'epic-5': 'in-progress',
+        '5-1-shell': 'ready-for-dev',
+      },
+    } as const;
+
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+      { id: '5-1-shell', status: 'ready-for-dev' },
+    ]);
+    const loadStorySpy = spyOn(files, 'loadStory').mockResolvedValue({
+      id: '5-1-shell',
+      title: 'Shell implementation',
+      status: 'ready-for-dev',
+    });
+    const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+    // Pass invalid approval status (simulating corrupted state)
+    const result = await loadStoriesForImplementation(mockCwd, mockSprintStatus, 'epic-5', {
+      '5-1-shell': 'invalid-status' as 'approved', // Type cast to bypass TS
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.approvalStatus).toBe('manual');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid approval status "invalid-status" for story 5-1-shell')
+    );
+
+    getAllStoriesSpy.mockRestore();
+    loadStorySpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+});
+
+describe('Story 5-2 Round 6: Approval badge colors', () => {
+  test('should display correct badge text for each approval status', () => {
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      // Test each status badge text
+      const testCases = [
+        { status: 'approved' as const, expectedBadge: '[approved]' },
+        { status: 'pending' as const, expectedBadge: '[pending]' },
+        { status: 'needs-changes' as const, expectedBadge: '[needs-changes]' },
+        { status: 'manual' as const, expectedBadge: '[manual]' },
+      ];
+
+      for (const testCase of testCases) {
+        consoleSpy.mockClear();
+
+        const stories = [
+          {
+            id: '5-1-test',
+            title: 'Test Story',
+            status: 'ready-for-dev' as const,
+            approvalStatus: testCase.status,
+          },
+        ];
+
+        displayPreImplementationSummary('epic-5', stories);
+
+        // Find the console.log call that contains the story line (with badge)
+        const storyCall = consoleSpy.mock.calls.find(
+          (call) => typeof call[0] === 'string' && call[0].includes(testCase.expectedBadge)
+        );
+
+        // Should include the badge text
+        expect(storyCall).toBeDefined();
+        expect(storyCall?.[0]).toContain(testCase.expectedBadge);
+      }
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('should display [unknown] badge for invalid status', () => {
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      // Use type assertion to pass invalid status (simulating edge case)
+      const stories = [
+        {
+          id: '5-1-invalid',
+          title: 'Invalid Status Story',
+          status: 'ready-for-dev' as const,
+          approvalStatus: 'invalid-unknown' as 'approved',
+        },
+      ];
+
+      displayPreImplementationSummary('epic-5', stories);
+
+      // Find the console.log call that contains the story line (with badge)
+      const storyCall = consoleSpy.mock.calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes('[unknown]')
+      );
+
+      // Should include the [unknown] fallback badge
+      expect(storyCall).toBeDefined();
+      expect(storyCall?.[0]).toContain('[unknown]');
+    } finally {
+      displayPhaseHeaderSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+});
+
+// Story 5-2 Round 7: Direct unit tests for getApprovalBadge
+describe('getApprovalBadge() direct unit tests (Story 5-2 Round 7)', () => {
+  test('should return [approved] badge for approved status', () => {
+    const result = getApprovalBadge('approved');
+    expect(result).toContain('[approved]');
+  });
+
+  test('should return [needs-changes] badge for needs-changes status', () => {
+    const result = getApprovalBadge('needs-changes');
+    expect(result).toContain('[needs-changes]');
+  });
+
+  test('should return [pending] badge for pending status', () => {
+    const result = getApprovalBadge('pending');
+    expect(result).toContain('[pending]');
+  });
+
+  test('should return [manual] badge for manual status', () => {
+    const result = getApprovalBadge('manual');
+    expect(result).toContain('[manual]');
+  });
+
+  test('should return [unknown] badge for unknown status', () => {
+    // Use type assertion to test default case
+    const result = getApprovalBadge('invalid-status' as StoryForImplementation['approvalStatus']);
+    expect(result).toContain('[unknown]');
+  });
+});
+
+// Story 5-3: Dev Agent Execution with Retry
+describe('Story 5-3: runDevAgentWithRetry()', () => {
+  const mockCwd = '/test/project';
+  const mockStoryId = '5-3-implement-dev-agent-execution-with-retry';
+  const mockStoryFilePath = '/test/project/_bmad-output/implementation-artifacts/5-3-story.md';
+
+  const createMockState = (): State => ({
+    currentEpic: 'epic-5',
+    lastUpdated: new Date().toISOString(),
+    workflow: {
+      mode: 'dev-only',
+      phase: 'implementation',
+      currentStoryIndex: 0,
+      devReviewIteration: 0,
+    },
+    stories: {
+      completed: [],
+      approvals: {},
+    },
+  });
+
+  describe('AC 1: Successful execution', () => {
+    test('4.1 - should call runDevAgent and display activity on success', async () => {
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        // Verify runDevAgent was called with correct parameters
+        expect(runDevAgentSpy).toHaveBeenCalledWith(mockCwd, mockStoryId, mockStoryFilePath);
+
+        // Verify activity was displayed
+        expect(displayAgentActivitySpy).toHaveBeenCalledWith(
+          'Dev',
+          `Implementing ${mockStoryId}...`
+        );
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 2, 3: Retry behavior with retryable errors', () => {
+    test('4.2 - should retry on network errors (ECONNREFUSED, ETIMEDOUT, etc.)', async () => {
+      let attemptCount = 0;
+      const networkError = new Error('ECONNREFUSED: Connection refused');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 3) {
+          throw networkError;
+        }
+        // Success on 3rd attempt
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify exponential backoff
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          3,
+          8,
+          createMockState()
+        );
+
+        // Verify 3 attempts were made
+        expect(attemptCount).toBe(3);
+
+        // Verify exponential backoff delays: 2s, 4s
+        expect(timeoutCalls).toHaveLength(2);
+        expect(timeoutCalls[0]).toBe(2000);
+        expect(timeoutCalls[1]).toBe(4000);
+
+        // Verify retry warnings were shown
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 2s... (attempt 1/3)');
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 4s... (attempt 2/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should retry on ETIMEDOUT errors', async () => {
+      let attemptCount = 0;
+      const timeoutError = new Error('ETIMEDOUT: Connection timeout');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw timeoutError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delay
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(attemptCount).toBe(2);
+
+        // Verify delay value for exponential backoff
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(2000);
+
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 2s... (attempt 1/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should retry on ENOENT errors', async () => {
+      let attemptCount = 0;
+      const enoentError = new Error('ENOENT: no such file or directory');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw enoentError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delay
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(attemptCount).toBe(2);
+
+        // Verify delay value for exponential backoff
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(2000);
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should retry on "Claude exited with code" errors', async () => {
+      let attemptCount = 0;
+      const claudeExitError = new Error('Claude exited with code 1');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw claudeExitError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delay
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(attemptCount).toBe(2);
+
+        // Verify delay value for exponential backoff
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(2000);
+
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 2s... (attempt 1/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should retry on ENOTFOUND errors (DNS resolution failure)', async () => {
+      let attemptCount = 0;
+      const enotfoundError = new Error('ENOTFOUND: getaddrinfo ENOTFOUND api.anthropic.com');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw enotfoundError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delay
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(attemptCount).toBe(2);
+
+        // Verify delay value for exponential backoff
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(2000);
+
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 2s... (attempt 1/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should retry on EAI_AGAIN errors (temporary DNS failure)', async () => {
+      let attemptCount = 0;
+      const eaiAgainError = new Error('EAI_AGAIN: temporary failure in name resolution');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw eaiAgainError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delay
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(attemptCount).toBe(2);
+
+        // Verify delay value for exponential backoff
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(2000);
+
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 2s... (attempt 1/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 3: Non-retryable errors', () => {
+    test('4.3 - should fail immediately on EACCES (permission denied)', async () => {
+      const permissionError = new Error('EACCES: permission denied');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockRejectedValue(permissionError);
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue(undefined);
+
+      try {
+        await expect(
+          runDevAgentWithRetry(mockCwd, mockStoryId, mockStoryFilePath, 1, 8, createMockState())
+        ).rejects.toThrow(permissionError);
+
+        // Verify error was logged with guidance
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('This error is not retryable')
+        );
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Try: Check file permissions')
+        );
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        errorSpy.mockRestore();
+        saveStateSpy.mockRestore();
+      }
+    });
+
+    test('should fail immediately on Invalid path/file errors', async () => {
+      const invalidPathError = new Error('Invalid story path: path contains invalid characters');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockRejectedValue(invalidPathError);
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue(undefined);
+
+      try {
+        await expect(
+          runDevAgentWithRetry(mockCwd, mockStoryId, mockStoryFilePath, 1, 8, createMockState())
+        ).rejects.toThrow(invalidPathError);
+
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('not retryable'));
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        errorSpy.mockRestore();
+        saveStateSpy.mockRestore();
+      }
+    });
+
+    test('should save state before throwing on non-retryable errors', async () => {
+      const permissionError = new Error('EACCES: permission denied');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockRejectedValue(permissionError);
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue(undefined);
+
+      try {
+        await expect(
+          runDevAgentWithRetry(mockCwd, mockStoryId, mockStoryFilePath, 1, 8, createMockState())
+        ).rejects.toThrow(permissionError);
+
+        // Verify state was saved before throwing
+        expect(saveStateSpy).toHaveBeenCalledTimes(1);
+        expect(saveStateSpy).toHaveBeenCalledWith(mockCwd, expect.any(Object));
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        errorSpy.mockRestore();
+        saveStateSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 4: Rate limit detection', () => {
+    test('4.4 - should detect rate limit and wait 60s', async () => {
+      let attemptCount = 0;
+      const rateLimitError = new Error('429: rate limit exceeded');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw rateLimitError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify 60s cooldown
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        // Verify 60s cooldown was applied
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(60000);
+
+        // Verify rate limit warning
+        expect(warnSpy).toHaveBeenCalledWith('Rate limited. Waiting 60s...');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should detect rate limit with "rate limit" text (case-insensitive)', async () => {
+      let attemptCount = 0;
+      const rateLimitError = new Error('Error: Rate Limit exceeded');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw rateLimitError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            expect(delay).toBe(60000);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        expect(warnSpy).toHaveBeenCalledWith('Rate limited. Waiting 60s...');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should handle rate limit followed by regular backoff scenario', async () => {
+      // Test scenario: attempt 1 fails with rate limit (60s wait), attempt 2 fails with network error (4s wait), attempt 3 succeeds
+      let attemptCount = 0;
+      const rateLimitError = new Error('429: rate limit exceeded');
+      const networkError = new Error('ECONNREFUSED: Connection refused');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount === 1) {
+          throw rateLimitError;
+        }
+        if (attemptCount === 2) {
+          throw networkError;
+        }
+        // attemptCount === 3: success
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify correct delays
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        // Verify 3 attempts were made
+        expect(attemptCount).toBe(3);
+
+        // Verify correct delays were applied: 60s (rate limit), then 4s (regular backoff on 2nd attempt)
+        expect(timeoutCalls).toHaveLength(2);
+        expect(timeoutCalls[0]).toBe(60000); // Rate limit cooldown
+        expect(timeoutCalls[1]).toBe(4000); // Regular backoff for attempt 2
+
+        // Verify correct warning messages
+        expect(warnSpy).toHaveBeenCalledWith('Rate limited. Waiting 60s...');
+        expect(warnSpy).toHaveBeenCalledWith('Dev agent failed. Retrying in 4s... (attempt 2/3)');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+
+    test('should detect rate limit from 429 numeric code only (without "rate limit" text)', async () => {
+      // Test case: Error message contains only "429" without "rate limit" text
+      // This verifies AC 4: detection of "429" code in isolation
+      let attemptCount = 0;
+      const rateLimitError = new Error('HTTP 429');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount < 2) {
+          throw rateLimitError;
+        }
+      });
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Track setTimeout calls to verify 60s cooldown
+      const timeoutCalls: number[] = [];
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown, delay?: number) => {
+          if (typeof delay === 'number') {
+            timeoutCalls.push(delay);
+          }
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      try {
+        await runDevAgentWithRetry(
+          mockCwd,
+          mockStoryId,
+          mockStoryFilePath,
+          1,
+          8,
+          createMockState()
+        );
+
+        // Verify 60s cooldown was applied (proves 429 was detected as rate limit)
+        expect(timeoutCalls).toHaveLength(1);
+        expect(timeoutCalls[0]).toBe(60000);
+
+        // Verify rate limit warning was shown
+        expect(warnSpy).toHaveBeenCalledWith('Rate limited. Waiting 60s...');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 5: Max retries exceeded', () => {
+    test('4.5 - should display error block and exit with code 1 after max retries', async () => {
+      const networkError = new Error('ECONNREFUSED: Connection refused');
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockRejectedValue(networkError);
+
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+      const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+      const warnSpy = spyOn(logger, 'warn').mockImplementation(() => {});
+      const mockSetTimeout = spyOn(global, 'setTimeout').mockImplementation(
+        (fn: (...args: never[]) => unknown) => {
+          fn();
+          return 0 as unknown as NodeJS.Timeout;
+        }
+      );
+
+      // Mock saveState to prevent file system operations during test
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+
+      // Mock process.exit to prevent test runner termination
+      const processExitSpy = spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit(1) called');
+      });
+
+      try {
+        await expect(
+          runDevAgentWithRetry(mockCwd, mockStoryId, mockStoryFilePath, 3, 8, createMockState())
+        ).rejects.toThrow('process.exit(1) called');
+
+        // Verify error block was displayed
+        expect(errorSpy).toHaveBeenCalledWith('Dev agent failed after 3 attempts');
+        expect(errorSpy).toHaveBeenCalledWith('State saved at Story 3/8');
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Try: Check network connection, verify API access, then restart johnny-bmad to retry'
+        );
+
+        // Verify exit code 1
+        expect(processExitSpy).toHaveBeenCalledWith(1);
+
+        // Verify saveState was called before exit
+        expect(saveStateSpy).toHaveBeenCalled();
+      } finally {
+        runDevAgentSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+        errorSpy.mockRestore();
+        warnSpy.mockRestore();
+        mockSetTimeout.mockRestore();
+        saveStateSpy.mockRestore();
+        processExitSpy.mockRestore();
+      }
+    });
+  });
+});
+
+// Story 5-3: runDevOnlyImplementationLoop
+describe('Story 5-3: runDevOnlyImplementationLoop()', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: false,
+    batch: false,
+    devOnly: true,
+  };
+
+  const createMockState = (): State => ({
+    currentEpic: 'epic-5',
+    lastUpdated: new Date().toISOString(),
+    workflow: {
+      mode: 'dev-only',
+      phase: 'implementation',
+      currentStoryIndex: 0,
+      devReviewIteration: 0,
+    },
+    stories: {
+      completed: [],
+      approvals: {},
+    },
+  });
+
+  const mockStories: StoryForImplementation[] = [
+    {
+      id: '5-1-shell',
+      title: 'Implement runDevOnlyWorkflow shell',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-2-detection',
+      title: 'Story detection',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-3-retry',
+      title: 'Dev agent retry',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+  ];
+
+  describe('AC 2: Story iteration', () => {
+    test('4.7 - should iterate through all stories', async () => {
+      const mockState = createMockState();
+
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, mockStories);
+
+        // Verify all stories were processed
+        expect(runDevAgentSpy).toHaveBeenCalledTimes(mockStories.length);
+
+        // Verify progress was displayed for each story with 'implementing' status
+        expect(displayProgressSpy).toHaveBeenCalledWith(1, mockStories.length, 'implementing');
+        expect(displayProgressSpy).toHaveBeenCalledWith(2, mockStories.length, 'implementing');
+        expect(displayProgressSpy).toHaveBeenCalledWith(3, mockStories.length, 'implementing');
+
+        // Verify currentStoryIndex was incremented to point past all stories after completion
+        expect(mockState.workflow.currentStoryIndex).toBe(mockStories.length);
+      } finally {
+        runDevAgentSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+
+    test('4.8 - should resume from currentStoryIndex', async () => {
+      // Start from story index 1 (second story)
+      const mockState = createMockState();
+      mockState.workflow.currentStoryIndex = 1;
+
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, mockStories);
+
+        // Should only process stories 2 and 3 (indices 1 and 2)
+        expect(runDevAgentSpy).toHaveBeenCalledTimes(2);
+
+        // First call should be for story at index 1
+        expect(displayProgressSpy).toHaveBeenCalledWith(2, 3, 'implementing');
+        expect(displayProgressSpy).toHaveBeenCalledWith(3, 3, 'implementing');
+        // Should NOT have been called with story 1
+        expect(displayProgressSpy).not.toHaveBeenCalledWith(1, 3, 'implementing');
+      } finally {
+        runDevAgentSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+  });
+
+  describe('AC 1: State saving before spawn', () => {
+    test('4.6 - should save state before spawning Dev agent', async () => {
+      const mockState = createMockState();
+
+      // Track when saveState is called relative to runDevAgent
+      const saveStateCallOrder: number[] = [];
+      const runDevAgentCallOrder: number[] = [];
+      let callCounter = 0;
+
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockImplementation(async () => {
+        callCounter++;
+        runDevAgentCallOrder.push(callCounter);
+      });
+
+      const saveStateSpy = spyOn(config, 'saveState').mockImplementation(async () => {
+        callCounter++;
+        saveStateCallOrder.push(callCounter);
+        return '/path/to/state';
+      });
+
+      const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+      const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+        () => {}
+      );
+
+      try {
+        await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, [mockStories[0]]);
+
+        // Verify saveState was called before runDevAgent
+        // saveState should have lower call order numbers
+        expect(saveStateCallOrder[0]).toBeLessThan(runDevAgentCallOrder[0]);
+      } finally {
+        runDevAgentSpy.mockRestore();
+        saveStateSpy.mockRestore();
+        displayProgressSpy.mockRestore();
+        displayAgentActivitySpy.mockRestore();
+      }
+    });
+  });
+});
+
+// Round 4 Review Follow-up: Integration test for runDevOnlyWorkflow calling runDevOnlyImplementationLoop
+describe('Story 5-3 Round 4: Integration tests', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: true, // Use yolo to skip confirmation prompt
+    batch: false,
+    devOnly: true,
+  };
+
+  const createMockState = (): State => ({
+    currentEpic: 'epic-5',
+    lastUpdated: new Date().toISOString(),
+    workflow: {
+      mode: 'dev-only',
+      phase: 'implementation',
+      currentStoryIndex: 0,
+      devReviewIteration: 0,
+    },
+    stories: {
+      completed: [],
+      approvals: {},
+    },
+  });
+
+  const mockStories: StoryForImplementation[] = [
+    {
+      id: '5-1-shell',
+      title: 'Implement runDevOnlyWorkflow shell',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-2-detection',
+      title: 'Story detection',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+  ];
+
+  test('should call runDevOnlyImplementationLoop with loaded stories', async () => {
+    const mockState = createMockState();
+
+    // Mock all dependencies
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const loadSprintStatusSpy = spyOn(files, 'loadSprintStatus').mockResolvedValue({
+      development_status: {
+        'epic-5': 'in-progress',
+        '5-1-shell': 'ready-for-dev',
+        '5-2-detection': 'ready-for-dev',
+      },
+    });
+    const getAllStoriesSpy = spyOn(files, 'getAllStoriesForEpic').mockReturnValue([
+      { id: '5-1-shell', status: 'ready-for-dev' },
+      { id: '5-2-detection', status: 'ready-for-dev' },
+    ]);
+    const loadStorySpy = spyOn(files, 'loadStory').mockImplementation(async (_cwd, storyId) => ({
+      id: storyId,
+      title: `Title for ${storyId}`,
+      status: 'ready-for-dev',
+      acceptanceCriteria: [],
+      filePath: `/test/stories/${storyId}.md`,
+    }));
+
+    // Mock the implementation loop dependencies
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+    const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+    const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+      () => {}
+    );
+    const displayPhaseHeaderSpy = spyOn(phaseHeader, 'displayPhaseHeader').mockImplementation(
+      () => {}
+    );
+    const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
+
+    try {
+      await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
+
+      // Verify runDevOnlyImplementationLoop was called by checking that runDevAgent was called
+      // for each story (this proves the implementation loop ran)
+      expect(runDevAgentSpy).toHaveBeenCalledTimes(mockStories.length);
+
+      // Verify the implementation loop processed all stories (progress displayed for each)
+      expect(displayProgressSpy).toHaveBeenCalledWith(1, mockStories.length, 'implementing');
+      expect(displayProgressSpy).toHaveBeenCalledWith(2, mockStories.length, 'implementing');
+
+      // Verify final info message showing completion
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Implementation complete'));
+    } finally {
+      saveStateSpy.mockRestore();
+      loadSprintStatusSpy.mockRestore();
+      getAllStoriesSpy.mockRestore();
+      loadStorySpy.mockRestore();
+      runDevAgentSpy.mockRestore();
+      displayProgressSpy.mockRestore();
+      displayAgentActivitySpy.mockRestore();
+      displayPhaseHeaderSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+});
+
+// Round 4 Review Follow-up: Error propagation in runDevOnlyImplementationLoop
+describe('Story 5-3 Round 4: Error propagation tests', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: false,
+    batch: false,
+    devOnly: true,
+  };
+
+  const createMockState = (): State => ({
+    currentEpic: 'epic-5',
+    lastUpdated: new Date().toISOString(),
+    workflow: {
+      mode: 'dev-only',
+      phase: 'implementation',
+      currentStoryIndex: 0,
+      devReviewIteration: 0,
+    },
+    stories: {
+      completed: [],
+      approvals: {},
+    },
+  });
+
+  const mockStories: StoryForImplementation[] = [
+    {
+      id: '5-1-shell',
+      title: 'First story',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-2-detection',
+      title: 'Second story',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-3-retry',
+      title: 'Third story',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+  ];
+
+  test('should terminate loop and preserve state index when runDevAgentWithRetry throws non-retryable error', async () => {
+    const mockState = createMockState();
+    const nonRetryableError = new Error('EACCES: permission denied');
+
+    // Mock dependencies - first story succeeds, second story throws non-retryable error
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent')
+      .mockResolvedValueOnce(undefined) // First story succeeds
+      .mockRejectedValue(nonRetryableError); // Second story fails
+
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+    const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+      () => {}
+    );
+    const errorSpy = spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, mockStories);
+
+      // Should not reach here - error should propagate
+      expect(true).toBe(false);
+    } catch (err) {
+      // Verify the error was propagated
+      expect((err as Error).message).toContain('EACCES');
+
+      // Verify only first story was processed (loop terminated on error)
+      expect(runDevAgentSpy).toHaveBeenCalledTimes(2); // Once for success, once for failure
+
+      // Verify state was saved before the error was thrown (critical for resume)
+      expect(saveStateSpy).toHaveBeenCalled();
+
+      // Verify progress was displayed for first and second story (before error on second)
+      expect(displayProgressSpy).toHaveBeenCalledWith(1, mockStories.length, 'implementing');
+      expect(displayProgressSpy).toHaveBeenCalledWith(2, mockStories.length, 'implementing');
+      // Third story should NOT have been processed
+      expect(displayProgressSpy).not.toHaveBeenCalledWith(3, mockStories.length, 'implementing');
+    } finally {
+      runDevAgentSpy.mockRestore();
+      saveStateSpy.mockRestore();
+      displayProgressSpy.mockRestore();
+      displayAgentActivitySpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('should allow resume from failed story index after non-retryable error', async () => {
+    // Simulate resume scenario: first story completed, failed on second story
+    // On resume, currentStoryIndex should point to failed story (index 1)
+    const mockState = createMockState();
+    mockState.workflow.currentStoryIndex = 1; // Resume from failed story (index 1 = second story)
+
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+    const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+      () => {}
+    );
+
+    try {
+      await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, mockStories);
+
+      // Should only process stories 2 and 3 (indices 1 and 2)
+      expect(runDevAgentSpy).toHaveBeenCalledTimes(2);
+
+      // Verify progress started from second story
+      expect(displayProgressSpy).toHaveBeenCalledWith(2, mockStories.length, 'implementing');
+      expect(displayProgressSpy).toHaveBeenCalledWith(3, mockStories.length, 'implementing');
+      // First story should NOT have been processed
+      expect(displayProgressSpy).not.toHaveBeenCalledWith(1, mockStories.length, 'implementing');
+    } finally {
+      runDevAgentSpy.mockRestore();
+      saveStateSpy.mockRestore();
+      displayProgressSpy.mockRestore();
+      displayAgentActivitySpy.mockRestore();
+    }
+  });
+});
+
+// Round 5 Review Follow-up: Test getStoryFilePath is called with correct parameters
+describe('Story 5-3 Round 5: getStoryFilePath tests', () => {
+  const mockCwd = '/test/project';
+  const mockArgs: CliArgs = {
+    resume: false,
+    help: false,
+    verbose: false,
+    yolo: false,
+    batch: false,
+    devOnly: true,
+  };
+
+  const createMockState = (): State => ({
+    currentEpic: 'epic-5',
+    lastUpdated: new Date().toISOString(),
+    workflow: {
+      mode: 'dev-only',
+      currentStoryIndex: 0,
+      totalStories: 3,
+    },
+  });
+
+  const mockStories: StoryForImplementation[] = [
+    {
+      id: '5-1-shell',
+      title: 'Implement runDevOnlyWorkflow shell',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-2-detection',
+      title: 'Story detection',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+    {
+      id: '5-3-retry',
+      title: 'Dev agent retry',
+      status: 'ready-for-dev',
+      approvalStatus: 'approved',
+    },
+  ];
+
+  test('should call getStoryFilePath with correct parameters for each story', async () => {
+    const mockState = createMockState();
+
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+    const saveStateSpy = spyOn(config, 'saveState').mockResolvedValue('/path/to/state');
+    const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
+    const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
+      () => {}
+    );
+    const getStoryFilePathSpy = spyOn(files, 'getStoryFilePath').mockReturnValue(
+      '/mocked/path/story.md'
+    );
+
+    try {
+      await runDevOnlyImplementationLoop(mockCwd, mockState, mockArgs, mockStories);
+
+      // Verify getStoryFilePath was called for each story with correct parameters
+      expect(getStoryFilePathSpy).toHaveBeenCalledTimes(mockStories.length);
+      expect(getStoryFilePathSpy).toHaveBeenNthCalledWith(1, mockCwd, '5-1-shell');
+      expect(getStoryFilePathSpy).toHaveBeenNthCalledWith(2, mockCwd, '5-2-detection');
+      expect(getStoryFilePathSpy).toHaveBeenNthCalledWith(3, mockCwd, '5-3-retry');
+    } finally {
+      runDevAgentSpy.mockRestore();
+      saveStateSpy.mockRestore();
+      displayProgressSpy.mockRestore();
+      displayAgentActivitySpy.mockRestore();
+      getStoryFilePathSpy.mockRestore();
+    }
   });
 });

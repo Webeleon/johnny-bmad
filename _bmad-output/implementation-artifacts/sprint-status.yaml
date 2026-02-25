@@ -37,8 +37,8 @@ development_status:
   epic-4-retrospective: optional
   epic-5: in-progress
   5-1-implement-rundevonlyworkflow-function-shell: done
-  5-2-implement-story-detection-and-pre-implementation-display: backlog
-  5-3-implement-dev-agent-execution-with-retry: backlog
+  5-2-implement-story-detection-and-pre-implementation-display: done
+  5-3-implement-dev-agent-execution-with-retry: done
   5-4-implement-reviewer-agent-execution-with-retry: backlog
   5-5-implement-dev-review-loop-and-commit-flow: backlog
   5-6-implement-dev-only-completion-with-celebration: backlog

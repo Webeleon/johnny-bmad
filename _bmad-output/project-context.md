@@ -108,6 +108,25 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Use `let` only when reassignment needed
 - NEVER use `var`
 
+**JSDoc Conventions:**
+- Use `@since 1.0.0` for all new exported functions (tracks feature introduction)
+- Use `@param` for function parameters with type and description
+- Use `@returns` for return values with type and description
+- Use `@throws` for exceptions that may be thrown
+- Use `@exits` (custom tag) when function calls `process.exit()` instead of throwing
+- Example:
+  ```typescript
+  /**
+   * Executes the dev agent with retry logic.
+   * @param cwd - The current working directory
+   * @param storyId - The story identifier (e.g., "5-3-retry-logic")
+   * @returns Promise that resolves when agent completes successfully
+   * @throws {Error} If non-retryable error occurs (permission denied, invalid path)
+   * @exits With code 1 if max retries exceeded
+   * @since 1.0.0
+   */
+  ```
+
 ### Development Workflow Rules
 
 **Commit Format:**
