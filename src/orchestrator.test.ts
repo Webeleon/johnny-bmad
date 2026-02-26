@@ -6933,8 +6933,12 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
       );
       const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
 
-      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      // Story 5-3 & 5-4: Mock agents to prevent actual spawn
       const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const runReviewAgentSpy = spyOn(reviewer, 'runReviewAgent').mockResolvedValue({
+        passed: true,
+        feedback: '',
+      });
       const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
       const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
@@ -6953,6 +6957,7 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         displayPhaseHeaderSpy.mockRestore();
         confirmActionSpy.mockRestore();
         runDevAgentSpy.mockRestore();
+        runReviewAgentSpy.mockRestore();
         displayProgressSpy.mockRestore();
         displayAgentActivitySpy.mockRestore();
       }
@@ -6990,6 +6995,13 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         throw new Error('process.exit(1) called');
       });
 
+      // Mock agents to prevent actual spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const runReviewAgentSpy = spyOn(reviewer, 'runReviewAgent').mockResolvedValue({
+        passed: true,
+        feedback: '',
+      });
+
       try {
         await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
       } catch {
@@ -7003,6 +7015,8 @@ describe('runDevOnlyWorkflow() - Story 5-1', () => {
         errorSpy.mockRestore();
         displayPhaseHeaderSpy.mockRestore();
         processExitSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        runReviewAgentSpy.mockRestore();
       }
     });
   });
@@ -7592,6 +7606,13 @@ describe('Story 5-2: runDevOnlyWorkflow() confirmation prompt', () => {
         throw new Error('process.exit(0) called');
       });
 
+      // Story 5-3 & 5-4: Mock agents to prevent actual spawn
+      const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const runReviewAgentSpy = spyOn(reviewer, 'runReviewAgent').mockResolvedValue({
+        passed: true,
+        feedback: '',
+      });
+
       try {
         await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
         expect(true).toBe(false); // Should not reach here
@@ -7608,6 +7629,8 @@ describe('Story 5-2: runDevOnlyWorkflow() confirmation prompt', () => {
         confirmActionSpy.mockRestore();
         infoSpy.mockRestore();
         processExitSpy.mockRestore();
+        runDevAgentSpy.mockRestore();
+        runReviewAgentSpy.mockRestore();
       }
     });
   });
@@ -7652,8 +7675,12 @@ describe('Story 5-2: runDevOnlyWorkflow() confirmation prompt', () => {
       const confirmActionSpy = spyOn(userInput, 'confirmAction').mockResolvedValue(true);
       const infoSpy = spyOn(logger, 'info').mockImplementation(() => {});
 
-      // Story 5-3: Mock runDevAgent to prevent actual agent spawn
+      // Story 5-3 & 5-4: Mock agents to prevent actual spawn
       const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+      const runReviewAgentSpy = spyOn(reviewer, 'runReviewAgent').mockResolvedValue({
+        passed: true,
+        feedback: '',
+      });
       const displayProgressSpy = spyOn(progress, 'displayProgress').mockImplementation(() => {});
       const displayAgentActivitySpy = spyOn(agentLine, 'displayAgentActivity').mockImplementation(
         () => {}
@@ -7673,6 +7700,7 @@ describe('Story 5-2: runDevOnlyWorkflow() confirmation prompt', () => {
         confirmActionSpy.mockRestore();
         infoSpy.mockRestore();
         runDevAgentSpy.mockRestore();
+        runReviewAgentSpy.mockRestore();
         displayProgressSpy.mockRestore();
         displayAgentActivitySpy.mockRestore();
       }
@@ -8003,6 +8031,13 @@ describe('Story 5-2 Round 5: displayStatus error output format', () => {
       throw new Error('process.exit(1) called');
     });
 
+    // Mock agents to prevent actual spawn
+    const runDevAgentSpy = spyOn(dev, 'runDevAgent').mockResolvedValue(undefined);
+    const runReviewAgentSpy = spyOn(reviewer, 'runReviewAgent').mockResolvedValue({
+      passed: true,
+      feedback: '',
+    });
+
     try {
       await runDevOnlyWorkflow(mockCwd, mockState, mockArgs);
       expect(true).toBe(false); // Should not reach here
@@ -8018,6 +8053,8 @@ describe('Story 5-2 Round 5: displayStatus error output format', () => {
       displayStatusSpy.mockRestore();
       errorSpy.mockRestore();
       processExitSpy.mockRestore();
+      runDevAgentSpy.mockRestore();
+      runReviewAgentSpy.mockRestore();
     }
   });
 });
