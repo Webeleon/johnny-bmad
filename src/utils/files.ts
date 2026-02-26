@@ -229,6 +229,53 @@ export async function storyFileExists(cwd: string, storyId: string): Promise<boo
   }
 }
 
+/**
+ * Get the expected file path for a story file
+ *
+ * Constructs the standard path for a story file based on story ID.
+ * This is useful when you need to pass a file path to agent functions
+ * that expect the full path rather than searching for it.
+ *
+ * **Security:** Validates storyId to prevent path traversal attacks.
+ * Rejects storyIds containing:
+ * - Path separators (/ or \)
+ * - Parent directory references (..)
+ * - Null bytes
+ *
+ * @param cwd - Current working directory (project root)
+ * @param storyId - Story ID (e.g., '5-3-implement-dev-agent-execution-with-retry')
+ * @returns Full path to the story file
+ * @throws Error if storyId contains path traversal patterns
+ *
+ * @example
+ * ```typescript
+ * const storyPath = getStoryFilePath('/project', '5-1-shell');
+ * // Returns: '/project/_bmad-output/implementation-artifacts/5-1-shell.md'
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Throws error on path traversal attempt
+ * getStoryFilePath('/project', '../etc/passwd');
+ * // Error: Invalid storyId: path traversal not allowed
+ * ```
+ *
+ * @since 1.0.0
+ */
+export function getStoryFilePath(cwd: string, storyId: string): string {
+  // Validate storyId to prevent path traversal attacks
+  if (
+    storyId.includes('..') ||
+    storyId.includes('/') ||
+    storyId.includes('\\') ||
+    storyId.includes('\0')
+  ) {
+    throw new Error(`Invalid storyId "${storyId}": path traversal not allowed`);
+  }
+
+  return join(cwd, STORIES_DIR, `${storyId}.md`);
+}
+
 export function areAllAcceptanceCriteriaDone(story: Story): boolean {
   if (story.acceptanceCriteria.length === 0) {
     return false;

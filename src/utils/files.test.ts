@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { SprintStatus } from '../types.js';
-import { findOngoingWork, getAllStoriesForEpic } from './files.js';
+import { findOngoingWork, getAllStoriesForEpic, getStoryFilePath } from './files.js';
 
 describe('findOngoingWork', () => {
   test('returns null when no sprint status', () => {
@@ -170,5 +170,74 @@ describe('getAllStoriesForEpic', () => {
     const result = getAllStoriesForEpic(status, 'epic-5');
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('5-1-story');
+  });
+});
+
+describe('getStoryFilePath', () => {
+  test('returns correct path for story ID', () => {
+    const cwd = '/project';
+    const storyId = '5-3-implement-dev-agent-execution-with-retry';
+    const result = getStoryFilePath(cwd, storyId);
+    expect(result).toBe(
+      '/project/_bmad-output/implementation-artifacts/5-3-implement-dev-agent-execution-with-retry.md'
+    );
+  });
+
+  test('handles different story ID formats', () => {
+    const cwd = '/home/user/my-project';
+    const storyId = '1-1-define-enhanced-state-typescript-interface';
+    const result = getStoryFilePath(cwd, storyId);
+    expect(result).toBe(
+      '/home/user/my-project/_bmad-output/implementation-artifacts/1-1-define-enhanced-state-typescript-interface.md'
+    );
+  });
+
+  test('handles relative paths', () => {
+    const cwd = '.';
+    const storyId = '5-1-shell';
+    const result = getStoryFilePath(cwd, storyId);
+    // Note: path.join normalizes './' to ''
+    expect(result).toBe('_bmad-output/implementation-artifacts/5-1-shell.md');
+  });
+
+  // Path traversal validation tests
+  test('throws error for parent directory traversal (..)', () => {
+    const cwd = '/project';
+    const storyId = '../etc/passwd';
+    expect(() => getStoryFilePath(cwd, storyId)).toThrow(
+      'Invalid storyId "../etc/passwd": path traversal not allowed'
+    );
+  });
+
+  test('throws error for parent directory in middle of ID', () => {
+    const cwd = '/project';
+    const storyId = '5-1-../hidden';
+    expect(() => getStoryFilePath(cwd, storyId)).toThrow(
+      'Invalid storyId "5-1-../hidden": path traversal not allowed'
+    );
+  });
+
+  test('throws error for forward slash in storyId', () => {
+    const cwd = '/project';
+    const storyId = '5-1/subdir/story';
+    expect(() => getStoryFilePath(cwd, storyId)).toThrow(
+      'Invalid storyId "5-1/subdir/story": path traversal not allowed'
+    );
+  });
+
+  test('throws error for backslash in storyId', () => {
+    const cwd = '/project';
+    const storyId = '5-1\\subdir\\story';
+    expect(() => getStoryFilePath(cwd, storyId)).toThrow(
+      'Invalid storyId "5-1\\subdir\\story": path traversal not allowed'
+    );
+  });
+
+  test('throws error for null byte in storyId', () => {
+    const cwd = '/project';
+    const storyId = '5-1\x00malicious';
+    expect(() => getStoryFilePath(cwd, storyId)).toThrow(
+      'Invalid storyId "5-1\x00malicious": path traversal not allowed'
+    );
   });
 });

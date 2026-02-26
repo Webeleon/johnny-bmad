@@ -159,6 +159,9 @@ export interface State {
 
   // Progress tracking
   stories: StoriesState;
+
+  // Completion tracking (optional, set when epic is fully completed)
+  completedAt?: string;
 }
 
 /**
